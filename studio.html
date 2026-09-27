@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#c9cfd2">
+<meta name="description" content="G. — your keyboard is an aquarium. Every key you tap is a tentacle. Never let go.">
+<title>G. studio · gigomakes</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Silkscreen&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="studio">
+<div class="app" id="app">
+<main class="main">
+  <header>
+    <h1>G.</h1>
+    <div class="zone" id="zone"></div>
+    <div class="hud"><div><span>Turn</span><b id="turn">0</b></div></div>
+  </header>
+
+  <div class="plate" id="plate" tabindex="0" aria-label="Keyboard tank">
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="coach" id="coach" aria-live="polite"></div>
+  <div class="status" id="status"></div>
+  <div class="sr" id="say" aria-live="polite"></div>
+  <div class="designer" id="why"></div>
+  <div class="designer rules" id="probe">Browser sees held: —</div>
+  <div class="designer rules" id="evlog"></div>
+
+  <details class="rules howto">
+    <summary>How to play</summary>
+    Tap any key you can see to put a tentacle there; it stays. Tap a tentacle to lift it, then tap where it goes. Each placement is a turn: everything you have seen moves, then the tank opens around the new tentacle. Keep at least one key held at all times or you let go (unless no holding is ticked). <kbd>G</kbd>+<kbd>.</kbd> starts, restarts, and after a run takes you where the tank sends you. Die, and the tank sends you to another one you have not cleared.
+  </details>
+
+  <footer>
+    <div class="legend" id="legend"></div>
+    <div class="ctl">
+      <label><input type="checkbox" id="sound" checked> sound</label>
+      <label title="You don't have to keep a key held down"><input type="checkbox" id="nohold"> no holding</label>
+      <label><input type="checkbox" id="editor"> editor</label>
+      <button class="linkish" id="reset-progress" type="button">reset progress</button>
+      <span class="keys-hint" title="Studio hotkeys"><kbd>←</kbd><kbd>→</kbd> tanks <kbd>↑</kbd><kbd>↓</kbd> zones</span>
+    </div>
+  </footer>
+</main>
+
+<aside class="panel" id="panel" hidden>
+  <div class="banner" id="e-banner" hidden>
+    <span id="b-text"></span>
+    <div class="row"><button class="pri" id="b-use">Use levels.js</button><button id="b-keep">Keep my copy</button></div>
+    <div class="hint">Using levels.js puts your copy in Backups, so nothing is lost.</div>
+  </div>
+
+  <section>
+    <h2>TANKS</h2>
+    <div class="row"><select id="e-levels" style="flex:1"></select></div>
+    <div class="row"><button id="e-new">New tank</button><button id="e-dup">Duplicate</button><button id="e-del">Delete</button><button id="e-undo">Undo</button></div>
+    <div class="row"><label>Zone <select id="e-zone"></select></label><label>Key <select id="e-slot" title="Swap with the tank on another key of this zone"></select></label><button id="e-setkey" title="Then press the key this tank should start on">Set key</button></div>
+    <div class="row"><label style="flex:1">Name <input type="text" id="e-name"></label></div>
+    <div class="row"><label>Goal <input type="number" id="e-goal" min="1" max="20" title="tentacles held at once to clear"></label><label>Max tentacles <input type="number" id="e-max" min="0" max="20" placeholder="no limit" title="empty = no limit"></label></div>
+    <div class="row"><label>Lifting <select id="e-lift"><option value="any">free</option><option value="one">one at a time</option><option value="none">never</option></select></label><label><input type="checkbox" id="e-finale"> finale (opens last)</label></div>
+    <div class="row"><label title="Closed: only the keys you paint as water are the tank; everything else is algae"><input type="checkbox" id="e-closed"> closed tank</label><button class="pri" id="e-test">Test from start</button></div>
+    <label class="coachbox" title="One line per moment: ready, 1, 2, ... (after that many tentacles), lift, won, eaten, letgo, fog, algae, rock, max, start, one, none. Tokens: {L} key cap (pulses), {~L} key cap (no pulse), {shark} icon, {G.} combo, {fog}, {goal}, {max}, {Hold}, {hold}, {next}.">Coach lines (shown under the tank; mostly for tutorial tanks)
+      <textarea id="e-coach" spellcheck="false" placeholder="ready: Press {L} to start.&#10;1: That is a {tentacle}. It stays.&#10;won: Clear! {G.} for the next tank."></textarea></label>
+  </section>
+
+  <section>
+    <h2>ZONE</h2>
+    <div class="row"><label style="flex:1">Name <input type="text" id="z-name"></label><label>Look <select id="z-env"></select></label></div>
+    <div class="row"><label title="Played first by new players: tanks in order, a death retries the same tank, coach lines guide it; players can skip it"><input type="checkbox" id="z-tut"> tutorial zone</label></div>
+    <div class="row"><label style="flex:1" title="The key each tank is named after, in order">Tank keys <input type="text" id="z-keys" placeholder="A S D F G H J K"></label></div>
+    <div class="row"><button id="z-new">New zone</button><button id="z-up">↑</button><button id="z-down">↓</button><button id="z-del">Delete zone</button></div>
+    <div class="hint" id="z-hint"></div>
+  </section>
+
+  <section>
+    <h2>BRUSH — click or drag on the board</h2>
+    <div class="brush" id="brush"></div>
+    <div class="hint" id="brush-hint"></div>
+  </section>
+
+  <section>
+    <h2>CREATURES</h2>
+    <div class="row"><span class="hint" style="flex:1">They move live on the board while you edit.</span><button id="pv-play">Pause</button><button id="pv-step">Step</button><button id="pv-restart">Restart</button></div>
+    <div class="hint" id="pv-info"></div>
+    <div class="row"><select id="e-creatures" style="flex:1"></select><button id="e-cdel">Remove</button></div>
+    <div class="row"><select id="e-ctype"></select><button id="e-cadd">Add</button></div>
+    <div class="cfields" id="cfields">
+      <label>Type</label><select id="c-type"></select>
+      <label>Mover</label><select id="c-mover"><option value="dir">direction + bounce</option><option value="path">path</option><option value="chase">goes for targets</option><option value="flee">flees</option><option value="still">still</option></select>
+      <label>Direction</label><select id="c-dir"><option>E</option><option>W</option><option>NE</option><option>NW</option><option>SE</option><option>SW</option></select>
+      <label>Speed</label><select id="c-speed"><option value="0.5">every other turn</option><option value="1">one step per turn</option><option value="2">two steps per turn</option></select>
+      <label>Size</label><select id="c-size"><option value="small">small (reef hides you)</option><option value="big">big (only a cave hides you)</option></select>
+      <label>Path</label><select id="c-loop"><option value="loop">loop</option><option value="pingpong">ping-pong</option></select>
+      <label>Flags</label><span class="row"><label><input type="checkbox" id="c-prey"> food</label><label><input type="checkbox" id="c-cave"> cave dweller</label><label><input type="checkbox" id="c-wake"> sleeps until touched</label></span>
+      <label>Eats</label><span class="row picks" id="c-eats"></span>
+      <label class="only-chase">Goes for</label><span class="row only-chase"><select id="c-go1"></select> then <select id="c-go2"></select></span>
+      <label class="only-chase">Range</label><span class="row only-chase"><input type="number" id="c-range" min="1" max="20"> keys</span>
+      <label class="only-flee">Flees from</label><span class="row picks only-flee" id="c-flees"></span>
+    </div>
+    <div class="row"><button id="c-ecodef" hidden>Use the type's defaults</button></div>
+    <div class="pathbox" id="c-path"></div>
+    <div class="row"><button id="c-draw">Draw path</button><button id="c-clear">Clear path</button><button id="c-place">Place</button></div>
+    <div class="hint">Goes for: the first kind in range is the target; a creature it does not eat is followed one key behind.</div>
+  </section>
+
+  <section>
+    <h2>WHO EATS WHOM</h2>
+    <div class="row"><label>Edit for <select id="eco-scope"><option value="level">this tank</option><option value="zone">this zone</option></select></label></div>
+    <div class="eco" id="eco"></div>
+    <div class="hint">Row eats column when they meet on a key or cross paths. Cave and reef protect creatures the way they protect tentacles. Click a cell to change it.</div>
+  </section>
+
+  <section>
+    <h2>SAVE</h2>
+    <div class="row"><button class="pri" id="e-copyall">Copy levels.js</button><button id="e-download">Download levels.js</button></div>
+    <textarea id="e-json" spellcheck="false" placeholder="Paste a tank, a list of tanks or a whole levels.js here, then Load."></textarea>
+    <div class="row"><button id="e-show">Show this tank</button><button id="e-copy">Copy this tank</button><button id="e-load">Load</button></div>
+    <div class="row"><select id="e-backups" style="flex:1"></select><button id="e-restore">Restore as a zone</button></div>
+    <div class="row"><button id="e-reset">Reset to levels.js</button></div>
+    <div class="hint" id="e-msg">Edits save in this browser as you go.</div>
+  </section>
+</aside>
+</div>
+<script src="telemetry.js"></script>
+<script src="engine.js"></script>
+<script src="levels.js"></script>
+<script src="gdot.js"></script>
+<script>
+// gigomakes site build: telemetry consent (nothing is sent until the player answers) + way back to the site.
+(function(){
+  var f=document.querySelector('footer'); if(!f) return;
+  var back=document.createElement('a'); back.href='/'; back.textContent='gigomakes'; back.style.cssText='color:var(--muted);text-decoration:none;letter-spacing:.08em;text-transform:uppercase;font-size:11px'; f.appendChild(back);
+  if(!window.Telemetry||window.Telemetry.asked()) return;
+  var ask=document.createElement('div'); ask.className='consent'; ask.style.cssText='width:100%;display:flex;gap:10px;align-items:center;color:var(--muted)';
+  ask.innerHTML='Share anonymous play data (which level, how it ended, how many turns)? No accounts, nothing personal. <button id="tel-yes">Yes</button><button id="tel-no">No</button>';
+  f.appendChild(ask);
+  ask.querySelector('#tel-yes').onclick=function(){Telemetry.set(true);ask.remove();};
+  ask.querySelector('#tel-no').onclick=function(){Telemetry.set(false);ask.remove();};
+})();
+</script>
+</body>
+</html>

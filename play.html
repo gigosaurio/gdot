@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#c9cfd2">
+<meta name="description" content="G. — your keyboard is an aquarium. Every key you tap is a tentacle. Never let go.">
+<title>G. · gigomakes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Silkscreen&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="player">
+<div class="app" id="app">
+<main class="main">
+  <header>
+    <h1>G.</h1>
+    <div class="zone" id="zone"></div>
+    <div class="hud"><div><span>Turn</span><b id="turn">0</b></div></div>
+  </header>
+
+  <div class="plate" id="plate" tabindex="0" aria-label="Keyboard tank">
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="coach" id="coach" aria-live="polite"></div>
+  <div class="status" id="status"></div>
+  <div class="sr" id="say" aria-live="polite"></div>
+
+  <footer class="pfoot">
+    <label class="snd"><input type="checkbox" id="sound" checked> sound</label>
+    <label class="snd" title="You don't have to keep a key held down: letting go of every key no longer ends the run"><input type="checkbox" id="nohold"> no holding</label>
+    <label class="snd" title="A one-line tip the first time you meet something"><input type="checkbox" id="tips" checked> tips</label>
+    <button class="linkish" id="tutorial" type="button" hidden>skip tutorial</button>
+    <details class="howto">
+      <summary aria-label="How to play">?</summary>
+      <p>Hold <kbd>G</kbd> and tap <kbd>.</kbd> to start. Each tank starts on the key it is named after. Tap any key you can see to put a tentacle there; it stays. Tap a tentacle to lift it. Every placement is a turn: everything you have seen moves first, then your tentacle lands. Put enough tentacles down (the tray under the tank), on every starfish you find, to clear the tank. Keep at least one key held down or you let go (tick <b>no holding</b> to turn that off).</p>
+      <div class="legend" id="legend"></div>
+      <button class="linkish" id="reset-progress" type="button">reset progress</button>
+    </details>
+  </footer>
+</main>
+</div>
+<script src="telemetry.js"></script>
+<script src="engine.js"></script>
+<script src="levels.js"></script>
+<script src="gdot.js"></script>
+<script>
+// gigomakes site build: telemetry consent (nothing is sent until the player answers) + way back to the site.
+(function(){
+  var f=document.querySelector('footer'); if(!f) return;
+  var back=document.createElement('a'); back.href='https://gigomakes.com/'; back.textContent='gigomakes'; back.className='back'; f.appendChild(back);
+  if(!window.Telemetry||window.Telemetry.asked()) return;
+  var ask=document.createElement('div'); ask.className='consent';
+  ask.innerHTML='Share anonymous play data (which tank, how it ended, how many turns)? No accounts, nothing personal. <button id="tel-yes">Yes</button><button id="tel-no">No</button>';
+  f.appendChild(ask);
+  ask.querySelector('#tel-yes').onclick=function(){Telemetry.set(true);ask.remove();};
+  ask.querySelector('#tel-no').onclick=function(){Telemetry.set(false);ask.remove();};
+})();
+</script>
+</body>
+</html>

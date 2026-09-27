@@ -1,0 +1,7 @@
+# Not uploaded to g.gigomakes.com (wrangler.gdot.jsonc uses this folder as its asset root).
+# The studio (editor + designer view) runs locally: open studio.html from the dev server.
+studio.html
+test
+tools
+*.md
+.assetsignore
