@@ -13,7 +13,25 @@ Or just open play.html from disk. This repo is the game on its own; the live sit
 Your keyboard is the tank. Every key you hold is a tentacle; each press is a turn.
 Runs straight from disk: open `play.html` in a browser. No build step.
 
-Current rules (2026-09-26): tap any revealed key to place a tentacle, it stays; tap a
+## Two rule sets
+
+Each zone plays by one of two rule sets (`zone.rules`, or `level.rules` on one tank):
+
+**Territory** (2026-09-28, the Hatchery and the Shallows first). Fill every open key of the tank in as
+few presses as you can. Creatures show where they go next: an arrow on each, and a dashed border on the
+key it will take. A creature that lands on one of your tentacles takes that key (the tentacle is gone; the
+key is free again once it leaves); nothing kills you outright, and the tank is only lost when every
+tentacle is taken, which plays it again. You can only grab keys next to one of your tentacles (putting back
+the one you just lifted is always fine). Lifting is free; lift and put back is a one-press wait. A starfish,
+once held, turns the algae around it into water: more to fill. The tank is clear when every key of the
+territory (grip keys joined to the start; urchins are walls) is yours or has a creature on it. Par is the
+fewest presses (`GDOT.solvePar`, an exact search; `par` is stored on each tank by tools/campaign.mjs or the
+studio's Find par). The header shows par and your best; a cleared tank can be clicked in the zone strip to
+play it again for par.
+
+**Classic** (the other zones until they are rebuilt).
+
+Current classic rules (2026-09-26): tap any revealed key to place a tentacle, it stays; tap a
 tentacle to pick it up; keep at least one key held at all times. The footer's **no holding** box
 (saved per browser) turns that last rule off: letting go of every key, or the window losing focus,
 no longer ends a run. Leaving the page mid-run still counts as letting go, so a reload is never a

@@ -246,7 +246,7 @@ function engineTests() {
       return null; };
     const rnd = rng(11); let same = 0, n = 0; const bad = [];
     const pool = ['KeyG', 'KeyH', 'KeyJ', 'KeyY', 'KeyU', 'KeyB', 'KeyN', 'KeyT'];
-    for (let t = 0; t < 24; t++) {
+    for (let t = 0; t < (process.env.GDOT_DEEP ? 24 : 10); t++) { // GDOT_DEEP=1: the full 24
       const tank = pool.filter((k, i) => i === 0 || rnd() < 0.6);
       const cs = []; if (rnd() < 0.8) cs.push(SH(['KeyY', 'KeyH', 'KeyN'].filter(k => tank.includes(k)).length > 1 ? ['KeyY', 'KeyH', 'KeyN'] : ['KeyU', 'KeyJ'], Math.floor(rnd() * 2)));
       if (rnd() < 0.5) cs.push({ type: 'crab', mover: 'dir', dir: 'W', at: 'KeyV', size: 'small', speed: 0.5 });
@@ -355,9 +355,11 @@ async function browserTests() {
       hurt:[...document.querySelectorAll('.k.hurt')].map(e=>e.dataset.code),trail:[...document.querySelectorAll('.k.trail')].map(e=>e.dataset.code),
       bad:[...document.querySelectorAll('.k.bad')].map(e=>e.dataset.code),gone:document.querySelectorAll('.k.gone').length,held3:document.querySelectorAll('.k.held').length,
       beaten:Object.keys(PROG.beaten),progCur:PROG.cur,coach:(document.getElementById('coach')||{}).innerHTML||'',coachText:(document.getElementById('coach')||{}).textContent||''})`);
-    const levels = loadLevels(), zones = loadZones();
+    let levels = loadLevels(), zones = loadZones();
+    const LIVE = { levels, zones }; // levels.js as shipped (its zones may use territory rules)
     const inZone = id => levels.filter(l => l.zone === id);
-    const zT = zones.find(z => z.tutorial), tut = zT ? inZone(zT.id) : [], real = zones.filter(z => !z.tutorial);
+    let zT = zones.find(z => z.tutorial), tut = zT ? inZone(zT.id) : [], real = zones.filter(z => !z.tutorial);
+    const parLine = l => { const r = GDOT.solvePar(l, { budget: 600000 }); return r.solved ? r.moves : null; };
     const sk = l => GDOT.createGame(l).START[0]; // every tank starts on its own key
     const SKIPPED = "localStorage.setItem('gdot-progress-v1', JSON.stringify({tutorial:'skipped'})); 1";
     // ---- the player page: no tools, a live tank until G.
@@ -410,7 +412,7 @@ async function browserTests() {
       for (let i = 0; i < tut.length; i++) {
         await tap('Period'); t = await state(); eq([t.lvl, t.phase], [tut[i].id, 'ready'], `tutorial tank ${i + 1} comes up in order`);
         const lvl = GDOT.resolveLevel(tut[i], zT);
-        let sol = solve(lvl, { budget: 200000 }); if (!sol.solved) sol = solve(lvl, { budget: 400000, pickups: true, wait: true });
+        let sol = lvl.rules === 'territory' ? GDOT.solvePar(lvl, { budget: 600000 }) : solve(lvl, { budget: 200000 }); if (!sol.solved && lvl.rules !== 'territory') sol = solve(lvl, { budget: 400000, pickups: true, wait: true });
         ok(sol.solved, `tutorial tank ${i + 1} is solvable`); if (!sol.solved) break;
         ok(!sol.moves.some(m => m.place === 'KeyG' || m.pickup === 'KeyG'), `tutorial tank ${i + 1} never needs G (the test holds it)`);
         for (const m of sol.moves) { if (m.pickup) await tap(m.pickup); await tap(m.place); }
@@ -466,6 +468,12 @@ async function browserTests() {
       await js(`localStorage.setItem('gdot-progress-v1', JSON.stringify({beaten:{},played:{[${JSON.stringify(first)}]:1},tick:1,cur:${JSON.stringify(inZone(real[0].id)[1].id)}})); 1`);
       await load(PLAYER); eq([await js('PROG.tutorial===undefined'), await js('STORE.levels[CUR].id')], [true, tut[0].id], 'a returning player who cleared nothing gets the tutorial first');
       eq(JSON.parse(await js("localStorage.getItem('gdot-progress-v1')")).cur, null, 'and that is saved');
+    }
+    // ---- the classic rules are tested on the classic campaign kept in test/fixtures (live zones may use territory rules)
+    if (zones.some(z => z.rules === 'territory')) {
+      const FIX = path.join(ROOT, 'test', 'fixtures', 'classic-levels.js');
+      levels = loadLevels(FIX); zones = loadZones(FIX); zT = zones.find(z => z.tutorial); tut = zT ? inZone(zT.id) : []; real = zones.filter(z => !z.tutorial);
+      await js(`localStorage.setItem('gdot-levels-v2', JSON.stringify({levels:${JSON.stringify(levels)},zones:${JSON.stringify(zones)},dirty:true,base:BUILTIN_SIG,baseCopy:BUILTIN})); 1`);
     }
     await js(SKIPPED);
     await playPage();
@@ -554,6 +562,44 @@ async function browserTests() {
     { const g3 = GDOT.createGame(z1[3]); GDOT.place(g3, sk(z1[3])); const safe = GDOT.legalPlacements(g3).find(k => { const h = GDOT.cloneGame(g3); return GDOT.place(h, k).type === 'placed' && k !== 'KeyG' && k !== 'Period'; });
       if (safe) { await tap(safe); await down('KeyG'); await tap('Period'); b = await state(); ok(b.lvl !== z1[3].id && b.coachText.includes('another tank of this zone'), 'G+. mid-run sends you on and the tip says why'); await up('KeyG'); } }
     await up(sk(z1[3]));
+    // ---- territory rules in the page (a made-up tank that says territory itself)
+    { const J = JSON.stringify;
+      const tt = { id: 'smoke-terr', name: 'Smoke territory', zone: real[0].id, rules: 'territory', goal: 8, start: ['KeyG'], required: [], tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyY', 'KeyU', 'KeyB'], terrain: {},
+        creatures: [{ type: 'shark', mover: 'path', path: ['KeyY', 'KeyU', 'KeyJ'], loop: 'pingpong', pathIndex: 0, size: 'big', speed: 1 }] };
+      const line = parLine(tt); tt.par = line.length;
+      await playPage(); await js(`STORE.levels.push(${J(tt)}); setCur(STORE.levels.length-1); buildRuntime(); PROG.tips={}; COACH.tip=[]; coachReady(); render(); 1`);
+      eq(await js('[G.MODE, document.getElementById("parbox").hidden, document.getElementById("par").textContent]'), ['territory', false, String(tt.par)], 'a territory tank shows its par');
+      ok((await state()).coachText.includes('Fill every open key'), 'and says what the goal is, once');
+      await down('KeyG'); b = await state();
+      ok(new RegExp('class="tcount">1/' + (await js('G.GOAL')) + '<').test(b.strip), 'the tray counts filled keys against keys to fill');
+      ok(await js('!!document.querySelector(".k .mark.intent")'), 'the shark shows an arrow');
+      eq(await js('document.querySelector(".k[data-code=KeyU]").classList.contains("aimed")'), false, 'a target still in fog is not marked');
+      await tap('KeyH'); ok(await js('document.querySelector(".k[data-code=KeyJ]").classList.contains("aimed")'), 'once uncovered, the key it moves to is marked');
+      await tap('KeyH'); // lift H: J stays uncovered but is not next to a tentacle
+      eq(await js('GDOT.placeBlock(G,"KeyN")'), 'algae', 'outside the tank is algae');
+      await tap('KeyH');
+      await js('G.fingers.clear(); G.fingers.add("KeyG"); G.phase="play"; 1'); await down('KeyJ'); b = await state(); eq(b.bad, ['KeyJ'], 'a key not next to a tentacle is refused'); await up('KeyJ');
+      ok(b.coachText.includes('Only keys next to'), 'and the reason is said');
+      // play the par line with real presses from a fresh start
+      await up('KeyG'); await js('buildRuntime(); 1'); await down('KeyG');
+      for (const m of line.slice(1)) { if (m.pickup) await tap(m.pickup); await tap(m.place); }
+      b = await state(); eq(b.phase, 'won', 'the par line clears the tank');
+      ok(/chip parc made/.test(b.strip), 'the strip shows presses against par, made'); eq(await js('PROG.best["smoke-terr"]'), tt.par, 'the best is recorded');
+      await up('KeyG');
+      const idx = await js('CUR'); await js(`document.querySelector('#zone .tank[data-i="${idx}"]').click(); 1`);
+      eq(await js('[LV.id, G.phase]'), ['smoke-terr', 'ready'], 'a cleared territory tank can be played again for par');
+      // a creature taking a key, and every key taken
+      const tk = { id: 'smoke-take', name: 'Smoke take', zone: real[0].id, rules: 'territory', goal: 8, start: ['KeyG'], required: [], tank: ['KeyG', 'KeyH', 'KeyJ'], terrain: {},
+        creatures: [{ type: 'shark', mover: 'path', path: ['KeyH', 'KeyG'], loop: 'pingpong', pathIndex: 0, size: 'big', speed: 1 }] };
+      await js(`STORE.levels.push(${J(tk)}); setCur(STORE.levels.length-1); buildRuntime(); 1`);
+      await js('place("KeyG"); GDOT.start(G); GDOT.pickup(G,"KeyG"); place("KeyG"); 1'); b = await state();
+      eq([b.phase, b.next], ['dead', 'smoke-take'], 'every tentacle taken: the tank is lost, and G+. plays it again');
+      ok(b.coachText.includes('Every') && b.coachText.includes('taken'), 'the loss says what happened');
+      await js(`STORE.levels.push(${J(Object.assign({}, tk, { id: 'smoke-take2', tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyF'] }))}); setCur(STORE.levels.length-1); buildRuntime(); PROG.tips={}; 1`);
+      await js('place("KeyG"); place("KeyF"); 1'); b = await state();
+      ok(await js('document.querySelector(".k[data-code=KeyG]").classList.contains("taken")'), 'a taken key is marked'); ok(b.coachText.includes('took that'), 'and explained the first time');
+      await down('KeyG'); await tap('Period');
+      eq(await js('[LV.id, G.phase, G.turn, [...G.fingers]]'), ['smoke-take2', 'play', 1, ['KeyG']], 'G+. mid-run on a territory tank starts it again (on G, the first tentacle goes straight down)'); await up('KeyG'); }
     // ---- max tentacles and lift one at a time, in the page
     const cap2 = { id: 'smoke-cap', name: 'Smoke cap', zone: real[0].id, goal: 2, maxTentacles: 2, lift: 'one', start: ['KeyG'], required: ['KeyJ'], terrain: {}, creatures: [] };
     await js(`STORE.levels.push(${JSON.stringify(cap2)}); CUR=STORE.levels.length-1; buildRuntime(); 1`);
@@ -761,6 +807,22 @@ async function browserTests() {
     await load(PAGE);
     eq(await js('[STORE.dirty, STORE.levels.length]'), [false, levels.length], 'a pre-zone copy is replaced by levels.js');
     ok(await js(`backups().some(b=>b.levels.length===1&&b.levels[0].id==='old')`), 'and kept in Backups');
+    // ---- the live levels.js: its territory zones clear at par with real presses
+    if (LIVE.zones.some(z => z.rules === 'territory')) {
+      await js("localStorage.removeItem('gdot-levels-v2'); localStorage.setItem('gdot-progress-v1', JSON.stringify({tutorial:'skipped'})); 1");
+      await playPage();
+      const tz = LIVE.zones.filter(z => z.rules === 'territory' && !z.tutorial);
+      for (const z of tz) for (const l of LIVE.levels.filter(l => l.zone === z.id)) {
+        const lvl = GDOT.resolveLevel(l, z); const line = parLine(lvl);
+        ok(!!line, `${l.name}: the solver clears it`); if (!line) continue;
+        eq(line.length, l.par, `${l.name}: par in levels.js is the solver's (${line.length})`);
+        await js(`setCur(levelIndex(${JSON.stringify(l.id)})); buildRuntime(); 1`);
+        const inT = new Set(lvl.tank || []); const hold = ['KeyQ', 'KeyP', 'KeyZ', 'KeyT', 'KeyG', 'KeyA'].find(k => !inT.has(k) && !line.some(m => m.place === k || m.pickup === k));
+        await down(hold); // an anchor finger that is not in the way, as a player keeps one key down
+        for (const m of line) { if (m.pickup) await tap(m.pickup); await tap(m.place); }
+        const ph = await js('G.phase'); eq(ph, 'won', `${l.name}: its par line clears it with real presses`); await up(hold);
+      }
+    }
     eq(errors, [], 'no page exceptions');
   } finally {
     try { cdp && cdp.ws.close(); } catch (e) {}
