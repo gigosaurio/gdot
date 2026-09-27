@@ -200,6 +200,16 @@ function stepAll(g){
   }
   return {stepped,meals};
 }
+// Intent: where each creature will be after your next press (it moves before your tentacle lands),
+// as {id, from, to, route}. A creature that stays put this turn has to===from. Only seen, awake, living
+// creatures; nothing is changed.
+function intents(g){
+  const h=cloneGame(g), out=[];
+  for(const c of h.creatures){ if(!c.alive||!c.seen||!c.awake) continue; const from=c.pos, route=[from]; const n=stepsThisTurn(c);
+    for(let i=0;i<n;i++){ moveOnce(h,c); if(c.pos!==route[route.length-1]) route.push(c.pos); }
+    out.push({id:c.id,from,to:c.pos,route}); }
+  return out;
+}
 // Back-compat single-creature step (tools use it to preview where a creature goes next).
 function stepCreature(g,c){ const n=stepsThisTurn(c); let moved=false; for(let i=0;i<n;i++){ const b=c.pos; moveOnce(g,c); if(c.pos!==b) moved=true; } return moved; }
 // Drawn on the board? (the UI adds its own designer/editor overrides)
@@ -369,5 +379,5 @@ function stateKey(g){
 
 return {ROWY,KEYS,KEYMAP,IDX,NEI,DIRS,OPP,L,adjacent,PRESETS,TYPES,TARGETS,MOVERS,HEADINGS,TERRAINS,LIFTS,clone,slug,expandPath,normalizeLevel,resolveLevel,ecologyOf,
   levelsSource,tankWater,shiftKey,shiftLevel,rowOffset,latticeOffset,createGame,cloneGame,isRock,passable,grip,distMap,targetKeys,moveOnce,stepAll,stepCreature,hidden,canEat,isVisible,lane,reveal,
-  start,kill,liftBlock,pickup,placeBlock,place,legalPlacements,stateKey};
+  intents,start,kill,liftBlock,pickup,placeBlock,place,legalPlacements,stateKey};
 });

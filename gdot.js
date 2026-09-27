@@ -622,6 +622,8 @@ function render(){
   if(debug) for(const c of creatures){ if(c.alive) for(const p of GDOT.lane(G,c)) lane.add(p); }
   let selPos=null;
   if(edit&&E.sel!=null){ const lc=LV.creatures[E.sel]; if(lc){ selPos=lc.mover==='path'?(lc.path||[])[0]:lc.at; if(lc.mover==='path') (lc.path||[]).forEach((p,i)=>{badge[p]=(badge[p]?badge[p]+',':'')+(i+1);}); } }
+  const INT=new Map(); if(phase==='play'||phase==='ready') for(const t of GDOT.intents(G)){ const c=G.creatures[t.id]; if(!GDOT.isVisible(G,c)) continue; INT.set(t.from,t); }
+  const aim=new Set([...INT.values()].filter(t=>t.to!==t.from).map(t=>t.to));
   const hurt=CUE.hurt, meals=new Map(((pv?pvCue.meals:CUE.meals)||[]).map(m=>[m.key,m])), ate=new Set(CUE.ate||[]), woke=new Set(CUE.woke||[]), spot=new Set(CUE.spot||[]);
   for(const k of KEYS){
     const d=els[k.code]; const code=k.code; let cls='k',html='';
@@ -653,6 +655,8 @@ function render(){
       html=onTop?`<span class="starfish">${ICON.starfish}</span>`+html:ICON.starfish+`<span class="sub">${esc(k.label)}</span>`;
     }
     if(edit){ if(START.includes(code)) cls+=' start'; if(badge[code]) html+=`<span class="badge">${badge[code]}</span>`; if(selPos===code) cls+=' sel'; }
+    if(!edit&&INT.has(code)&&occ[code]){ const t=INT.get(code); if(t.to===t.from) html+=mark('stay',ICON.slash.replace('M4 16 L16 4','M5 10 H15')); else { const f=KEYMAP[t.from], k=KEYMAP[t.to], deg=Math.round(Math.atan2(ROWY[k.row]-ROWY[f.row],(k.x+k.w/2)-(f.x+f.w/2))*180/Math.PI); html+=`<span class="mark intent" style="transform:rotate(${deg}deg)">${ICON.arrow}</span>`; } }
+    if(!edit&&aim.has(code)&&revealed.has(code)) cls+=' aimed'; // a creature arrives here after your next press
     if(pv&&START.includes(code)&&!occ[code]){ cls+=' pvghost'; html+=`<span class="ghost pvg">${ICON.tentacle}</span>`; }
     if(phase==='intro'&&(code==='KeyG'||code==='Period')) cls+=' start';
     if(ck.has(code)&&!edit&&!/ fog\b/.test(cls)) cls+=' coachk'; // the key the coach line names

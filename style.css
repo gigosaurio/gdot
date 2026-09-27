@@ -209,3 +209,7 @@ body.intro .coach{background:transparent;border-color:transparent;color:var(--mu
 .panel .coachbox{display:flex;flex-direction:column;gap:3px;color:var(--muted)} .panel .coachbox textarea{height:84px}
 .coach .nw{white-space:nowrap}
 .k.pressed{visibility:visible;outline:2px dotted var(--held);outline-offset:-6px}
+/* ---- intent: where each creature goes on your next press ---- */
+.k .mark.intent{right:0;top:0;width:38%;height:38%;color:var(--danger);transform-origin:50% 50%}
+.k .mark.stay{right:1px;top:1px;width:30%;height:30%;color:var(--muted)}
+.k.aimed::before{content:'';position:absolute;inset:0;border:calc(var(--u)*.06) dashed var(--danger);border-radius:2px;pointer-events:none;z-index:2}
