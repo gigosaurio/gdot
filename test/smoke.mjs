@@ -12,7 +12,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { loadLevels, loadZones, solve } from '../tools/solver.mjs';
+import { loadLevels, loadZones, solve, rng } from '../tools/solver.mjs';
 
 const require = createRequire(import.meta.url);
 const GDOT = require('../engine.js');
@@ -177,6 +177,84 @@ function engineTests() {
     ok(s.solved, `${level.name}: solver finds a clear`);
     if (s.solved) { const r = GDOT.createGame(played); for (const m of s.moves) { if (m.pickup) GDOT.pickup(r, m.pickup); GDOT.place(r, m.place); } eq(r.phase, 'won', `${level.name}: the line replays to a clear`); }
   }
+}
+
+/* ================= territory rules (engine) ================= */
+{
+  const T = o => lv(Object.assign({ rules: 'territory' }, o));
+  const SH = (path, i = 0) => ({ type: 'shark', mover: 'path', path, loop: 'pingpong', pathIndex: i, size: 'big', speed: 1 });
+  // the goal: every key of the territory; an urchin is a wall; a crab eating it opens the key
+  { const g = GDOT.createGame(T({ tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyK'], creatures: [{ type: 'urchin', mover: 'still', at: 'KeyJ', size: 'big', speed: 0 }] }));
+    eq([...GDOT.territory(g)].sort(), ['KeyG', 'KeyH'], 'territory: grip keys joined to the start; an urchin is a wall');
+    eq([g.MODE, g.GOAL, g.MAX], ['territory', 2, 0], 'territory mode: the goal is the keys to fill, no tentacle cap'); }
+  { const g = GDOT.createGame(T({ tank: ['KeyG', 'KeyH', 'KeyJ'], creatures: [{ type: 'urchin', mover: 'still', at: 'KeyJ', size: 'big', speed: 0 }, { type: 'crab', mover: 'dir', dir: 'W', at: 'KeyK', size: 'small', speed: 1 }] }));
+    play(g, 'KeyG'); g.creatures[1].seen = true; play(g, 'KeyH');
+    ok(!g.creatures[0].alive && GDOT.territory(g).has('KeyJ'), 'when the crab eats the urchin, its key joins the territory'); }
+  // reach: only next to a tentacle; putting back the one you lifted is always allowed
+  { const g = GDOT.createGame(T({ tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyF'] }));
+    play(g, 'KeyG', 'KeyH'); GDOT.pickup(g, 'KeyG'); eq(GDOT.placeBlock(g, 'KeyF'), 'reach', 'F is no longer next to a tentacle once G is lifted');
+    eq(GDOT.placeBlock(g, 'KeyG'), null, 'but the lifted G can go back'); eq(GDOT.legalPlacements(g).sort(), ['KeyG', 'KeyJ'], 'legal presses follow the reach rule');
+    const k = GDOT.stateKey(g); GDOT.place(g, 'KeyG'); ok(GDOT.stateKey(g) !== k, 'state keys see the lift'); }
+  // a creature takes a key instead of killing; the key is free again once it leaves
+  { const g = GDOT.createGame(T({ tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyY', 'KeyU'], creatures: [SH(['KeyY', 'KeyH', 'KeyJ'])] }));
+    play(g, 'KeyG'); let ev = play(g, 'KeyB'); eq(ev.type, 'refused', 'B is algae in a closed tank');
+    const pred = GDOT.intents(g)[0]; ev = play(g, 'KeyH');
+    eq([ev.type, ev.taken.map(t => t.key), [...g.fingers]], ['placed', ['KeyH'], ['KeyG']], 'pressing where the shark lands: it takes the key, you keep playing');
+    eq(pred.to, 'KeyH', 'the arrow said so'); ok(ev.taken[0].landed, 'and says it landed on your new tentacle');
+    ev = play(g, 'KeyY'); eq(g.creatures[0].pos, 'KeyJ', 'the shark moves on'); ev = play(g, 'KeyH'); eq(ev.taken.length, 1, 'H again, as it swings back: taken again');
+    eq(g.phase, 'play', 'still playing'); }
+  // a creature swimming onto a tentacle already down takes it; losing the last one loses the tank
+  { const g = GDOT.createGame(T({ tank: ['KeyG', 'KeyH', 'KeyJ'], creatures: [SH(['KeyH', 'KeyG'])] }));
+    play(g, 'KeyG'); const ev = play(g, 'KeyG'); eq(ev.type, 'noop', 'a held key is a no-op');
+    GDOT.pickup(g, 'KeyG'); const e2 = GDOT.place(g, 'KeyG'); eq([e2.type, e2.kind, g.phase], ['dead', 'overrun', 'dead'], 'waiting where the shark lands on your only tentacle: every tentacle taken, the tank is lost'); }
+  // clear: every key yours or under a creature
+  { const g = GDOT.createGame(T({ tank: ['KeyG', 'KeyH', 'KeyJ'], creatures: [SH(['KeyJ'])] }));
+    eq(GDOT.territory(g).size, 3, 'a creature on a key does not shrink the territory');
+    play(g, 'KeyG'); const ev = play(g, 'KeyH'); eq(ev.type, 'won', "clear once every key is yours or a creature's"); }
+  // starfish: once held, the algae around it becomes water, once; the level and clones are untouched
+  { const L0 = T({ tank: ['KeyG', 'KeyH'], required: ['KeyH'] }); const g = GDOT.createGame(L0); play(g, 'KeyG');
+    const c = GDOT.cloneGame(g); const ev = play(g, 'KeyH');
+    eq([ev.type, ev.grew.slice().sort(), g.GOAL], ['placed', ['KeyB', 'KeyJ', 'KeyN', 'KeyU', 'KeyY'], 7], 'the starfish turns the algae around it into water: more to fill');
+    ok(c.TER.KeyJ === 'algae' && !L0.terrain.KeyJ, 'the clone and the level keep their own terrain');
+    GDOT.pickup(g, 'KeyH'); const e2 = GDOT.place(g, 'KeyH'); eq(e2.grew, [], 'it only grows once'); ok(GDOT.stateKey(g).includes('|g'), 'state keys include grown starfish'); }
+  // prey is still eaten
+  { const g = GDOT.createGame(T({ tank: ['KeyG', 'KeyH', 'KeyJ'], creatures: [{ type: 'fish', mover: 'still', at: 'KeyH', size: 'small', speed: 0, prey: true }] }));
+    play(g, 'KeyG'); const ev = play(g, 'KeyH'); eq([ev.ate.length, g.fingers.has('KeyH')], [1, true], 'landing on prey eats it and keeps the key'); }
+  // classic mode unchanged: a bite kills
+  { const g = GDOT.createGame(lv({ tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyY', 'KeyU'], creatures: [SH(['KeyY', 'KeyH', 'KeyJ'])] })); play(g, 'KeyG'); eq(play(g, 'KeyH').type, 'dead', 'classic tanks still bite'); }
+  // intents predict the real move, for every kind of mover
+  { const rnd = rng(7); let checked = 0, wrong = 0;
+    for (let t = 0; t < 60; t++) {
+      const keys = ['KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyY', 'KeyU', 'KeyI', 'KeyB', 'KeyN', 'KeyM', 'KeyF', 'KeyT'];
+      const cs = [SH(['KeyY', 'KeyU', 'KeyI', 'KeyK', 'KeyM'], Math.floor(rnd() * 4)), { type: 'crab', mover: 'dir', dir: ['E', 'W', 'NE', 'SW'][t % 4], at: 'KeyN', size: 'small', speed: 0.5 },
+        { type: 'eel', mover: 'chase', at: 'KeyK', size: 'big', speed: 1, cave: true, wake: false }, { type: 'barracuda', mover: 'dir', dir: 'W', at: 'KeyT', size: 'small', speed: 2 }];
+      const g = GDOT.createGame(T({ tank: keys, creatures: cs.slice(0, 1 + (t % 4)) }));
+      play(g, 'KeyG');
+      for (let n = 0; n < 8 && g.phase === 'play'; n++) {
+        const pred = GDOT.intents(g); const opts = GDOT.legalPlacements(g); if (!opts.length) break;
+        const k = opts[Math.floor(rnd() * opts.length)]; GDOT.place(g, k);
+        for (const pr of pred) { const c = g.creatures[pr.id]; if (!c.alive) continue; checked++; if (c.pos !== pr.to) wrong++; }
+      }
+    }
+    ok(checked > 100 && wrong === 0, `intents predict every move (${checked} checked, ${wrong} wrong)`); }
+  // par is exact: A* matches a plain breadth-first search on random small tanks
+  { const bfs = L => { const g0 = GDOT.createGame(L); let layer = [g0], seen = new Set([GDOT.stateKey(g0)]);
+      for (let d = 1; d <= 11; d++) { const next = [];
+        for (const g of layer) { const acts = g.turn === 0 ? g.START.map(k => ({ place: k })) : [...GDOT.legalPlacements(g).map(k => ({ place: k })), ...[...g.fingers].flatMap(f => { const h = GDOT.cloneGame(g); return GDOT.pickup(h, f) ? GDOT.legalPlacements(h).map(k => ({ pickup: f, place: k })) : []; })];
+          for (const a of acts) { const h = GDOT.cloneGame(g); if (a.pickup) GDOT.pickup(h, a.pickup); const ev = GDOT.place(h, a.place); if (ev.type === 'won') return d; if (ev.type !== 'placed') continue; const k = GDOT.stateKey(h); if (seen.has(k)) continue; seen.add(k); next.push(h); } }
+        layer = next; if (!layer.length) return null; }
+      return null; };
+    const rnd = rng(11); let same = 0, n = 0; const bad = [];
+    const pool = ['KeyG', 'KeyH', 'KeyJ', 'KeyY', 'KeyU', 'KeyB', 'KeyN', 'KeyT'];
+    for (let t = 0; t < 24; t++) {
+      const tank = pool.filter((k, i) => i === 0 || rnd() < 0.6);
+      const cs = []; if (rnd() < 0.8) cs.push(SH(['KeyY', 'KeyH', 'KeyN'].filter(k => tank.includes(k)).length > 1 ? ['KeyY', 'KeyH', 'KeyN'] : ['KeyU', 'KeyJ'], Math.floor(rnd() * 2)));
+      if (rnd() < 0.5) cs.push({ type: 'crab', mover: 'dir', dir: 'W', at: 'KeyV', size: 'small', speed: 0.5 });
+      const L = T({ tank, creatures: cs, required: rnd() < 0.3 ? [tank[tank.length - 1]] : [] });
+      const a = GDOT.solvePar(L, { budget: 200000 }); const b = bfs(L); n++;
+      if ((a.solved ? a.par : null) === b) same++; else bad.push(t + ':' + a.par + '/' + b);
+    }
+    eq(bad, [], `par (A*) equals breadth-first search on ${n} random tanks`); ok(same === n, 'all agree'); }
 }
 
 /* ================= levels: tutorial coach lines ================= */

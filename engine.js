@@ -137,7 +137,7 @@ function createGame(level){
     r.prev=r.pos;
     return r;
   }).filter(c=>c.pos);
-  if(g.MODE==='territory') g.GOAL=fillable(g);
+  if(g.MODE==='territory') tally(g);
   return g;
 }
 function cloneGame(g){ return Object.assign({},g,{fingers:new Set(g.fingers),revealed:new Set(g.revealed),grown:new Set(g.grown||[]),creatures:g.creatures.map(c=>Object.assign({},c)),last:null}); }
@@ -154,6 +154,8 @@ const creatureKeys=g=>{ const s=new Set(); for(const c of g.creatures) if(c.aliv
 function unfilled(g){ const t=territory(g), ck=creatureKeys(g); let n=0; for(const k of t) if(!g.fingers.has(k)&&!ck.has(k)) n++; return n; }
 // keys you can still fill right now (the live goal the tray shows)
 function fillable(g){ const t=territory(g), ck=creatureKeys(g); let n=0; for(const k of t) if(!ck.has(k)) n++; return n; }
+// one pass for the end of a press: territory size, keys to fill now, keys still empty
+function tally(g){ const t=territory(g), ck=creatureKeys(g); let fill=0, left=0; for(const k of t) if(!ck.has(k)){ fill++; if(!g.fingers.has(k)) left++; } g.tsize=t.size; g.GOAL=fill; g.left=left; return left; }
 
 const isRock=(g,k)=>g.TER[k]==='rock';
 const passable=(g,k)=>!!KEYMAP[k]&&!isRock(g,k);
@@ -336,8 +338,7 @@ function territoryEnd(g,code,ev){
     g.grown.add(k); let copied=false;
     for(const n of NEI[k]) if(g.TER[n]==='algae'){ if(!copied){ g.TER=Object.assign({},g.TER); copied=true; } delete g.TER[n]; grew.push(n); g.revealed.add(n); }
   }
-  g.GOAL=fillable(g);
-  const left=unfilled(g);
+  const left=tally(g);
   const out=Object.assign({type:'placed',code,taken,ate,grew,left,reqLeft:0},ev);
   if(!g.fingers.size){
     g.phase='dead'; const t=taken[taken.length-1]||{};
@@ -349,9 +350,7 @@ function territoryEnd(g,code,ev){
 
 /* ================= par: the fewest presses (territory) ================= */
 // A* over whole game states. A move is one press, alone or after a free lift ({pickup, place}; pickup
-// equal to place is a wait). Heuristic: the keys still to fill, divided by 1 + the moving creatures (a press
-// fills one key and each creature can cover at most one more), so it never overestimates and the first clear
-// found is the shortest. Returns {solved, par, moves, nodes, exhausted}.
+// equal to place is a wait). The estimate below never overestimates, so the first clear found is the shortest. Returns {solved, par, moves, nodes, exhausted}.
 function solvePar(level,opts){
   const budget=(opts&&opts.budget)||200000, g0=createGame(level);
   if(g0.MODE!=='territory') return {solved:false,par:null,moves:null,nodes:0,exhausted:false,reason:'not a territory level'};
@@ -363,8 +362,10 @@ function solvePar(level,opts){
   const heap=[], push=n=>{ heap.push(n); let i=heap.length-1; while(i){ const p=(i-1)>>1; if(less(heap[p],heap[i])) break; [heap[p],heap[i]]=[heap[i],heap[p]]; i=p; } };
   const less=(a,b)=>a.f<b.f||(a.f===b.f&&a.g.turn>b.g.turn);
   const pop=()=>{ const top=heap[0], last=heap.pop(); if(heap.length){ heap[0]=last; let i=0; for(;;){ const l=2*i+1, r=l+1; let m=i; if(l<heap.length&&less(heap[l],heap[m])) m=l; if(r<heap.length&&less(heap[r],heap[m])) m=r; if(m===i) break; [heap[m],heap[i]]=[heap[i],heap[m]]; i=m; } } return top; };
-  const movers=g=>g.creatures.filter(c=>c.alive&&!c.prey&&c.mover!=='still'&&c.speed>0).length;
-  const est=g=>Math.ceil(unfilled(g)/(1+movers(g)));
+  // Lower bound: territory size - tentacles - creatures that can hold a key. Only a press (+1 tentacle) lowers it, by one at most:
+  // growth and meals only raise it, and at a clear every key is a tentacle or a creature's. So par stays exact.
+  const movers=g=>{ let m=0; for(const c of g.creatures) if(c.alive&&!c.prey&&c.mover!=='still'&&c.speed>0) m++; return m; };
+  const est=g=>Math.max(0,g.tsize-g.fingers.size-movers(g),Math.ceil(g.left/(1+movers(g))));
   const best=new Map(); let nodes=0;
   push({g:g0,f:est(g0),parent:null,act:null}); best.set(stateKey(g0),0);
   while(heap.length){
@@ -469,5 +470,5 @@ function stateKey(g){
 
 return {ROWY,KEYS,KEYMAP,IDX,NEI,DIRS,OPP,L,adjacent,PRESETS,TYPES,TARGETS,MOVERS,HEADINGS,TERRAINS,LIFTS,clone,slug,expandPath,normalizeLevel,resolveLevel,ecologyOf,
   levelsSource,tankWater,shiftKey,shiftLevel,rowOffset,latticeOffset,createGame,cloneGame,isRock,passable,grip,distMap,targetKeys,moveOnce,stepAll,stepCreature,hidden,canEat,isVisible,lane,reveal,
-  intents,territory,unfilled,fillable,creatureKeys,territoryEnd,solvePar,start,kill,liftBlock,pickup,placeBlock,place,legalPlacements,stateKey};
+  intents,territory,unfilled,fillable,tally,creatureKeys,territoryEnd,solvePar,start,kill,liftBlock,pickup,placeBlock,place,legalPlacements,stateKey};
 });
