@@ -230,6 +230,66 @@ export function montecarlo(level, policy, opts = {}) {
   return { winRate: won / n, stuckRate: stuck / n, avgTurns: won ? turns / won : null, deaths, topDeath: top ? `${top[0]} ${Math.round(100 * top[1] / n)}%` : '-', trapRate: legal ? traps / legal : 0 };
 }
 
+/* ================= territory players ================= */
+// Territory tanks (fill every key, par = fewest presses). Two players, both without planning:
+//   greedy — reads the arrows: never presses a key a creature is about to take, lifts a tentacle a
+//            creature is about to take (and puts it back when it is safe), else fills any safe key;
+//            when nothing is safe it waits (lift and put back a safe tentacle).
+//   random — any legal press.
+// The gap between greedy and par is what planning buys: the bigger, the more the tank is a puzzle.
+export function terrRollout(level, policy, rand, cap) {
+  const g = GDOT.createGame(level);
+  for (;;) {
+    if (g.turn >= cap) return { result: 'stuck', turn: g.turn };
+    let act = null;
+    if (g.phase === 'ready' || g.turn === 0) act = { place: g.START[Math.floor(rand() * g.START.length)] };
+    else if (policy === 'random') {
+      const ks = GDOT.legalPlacements(g); if (!ks.length) return { result: 'stuck', turn: g.turn };
+      act = { place: ks[Math.floor(rand() * ks.length)] };
+    } else {
+      const aimed = new Set(GDOT.intents(g).map(t => t.to));
+      const threat = [...g.fingers].filter(k => aimed.has(k));
+      const h = GDOT.cloneGame(g); let pick = null;
+      if (threat.length && g.fingers.size > 1 && g.LIFT !== 'none' && GDOT.pickup(h, threat[0])) pick = threat[0];
+      const safe = GDOT.legalPlacements(h).filter(k => !aimed.has(k) && k !== pick);
+      if (safe.length) act = pick ? { pickup: pick, place: safe[Math.floor(rand() * safe.length)] } : { place: safe[Math.floor(rand() * safe.length)] };
+      else {
+        const still = [...g.fingers].filter(k => !aimed.has(k));
+        if (still.length && g.LIFT !== 'none') { const w = still[Math.floor(rand() * still.length)]; act = { pickup: w, place: w }; }
+        else { const ks = GDOT.legalPlacements(g); if (!ks.length) return { result: 'stuck', turn: g.turn }; act = { place: ks[Math.floor(rand() * ks.length)] }; }
+      }
+    }
+    if (act.pickup && !GDOT.pickup(g, act.pickup)) return { result: 'stuck', turn: g.turn };
+    const ev = GDOT.place(g, act.place);
+    if (ev.type === 'refused') return { result: 'stuck', turn: g.turn };
+    if (ev.type === 'dead') return { result: 'dead', turn: g.turn };
+    if (ev.type === 'won') return { result: 'won', turn: g.turn };
+  }
+}
+export function terrPlayers(level, policy, opts = {}) {
+  const n = opts.rollouts || 1000, rand = rng(opts.seed || 1), cap = opts.cap || 40;
+  let won = 0, dead = 0, turns = 0, best = null;
+  for (let i = 0; i < n; i++) { const r = terrRollout(level, policy, rand, cap); if (r.result === 'won') { won++; turns += r.turn; if (best == null || r.turn < best) best = r.turn; } else if (r.result === 'dead') dead++; }
+  return { winRate: won / n, deadRate: dead / n, avgTurns: won ? turns / won : null, best };
+}
+export function analyzeTerritory(level, opts = {}) {
+  const t0 = Date.now(); const g = GDOT.createGame(level);
+  const s = GDOT.solvePar(level, { budget: opts.budget || 400000 });
+  const cap = Math.max(20, (s.par || g.GOAL) * 4);
+  const greedy = terrPlayers(level, 'greedy', { rollouts: opts.rollouts || 1000, seed: opts.seed, cap });
+  const random = terrPlayers(level, 'random', { rollouts: opts.rollouts || 1000, seed: opts.seed, cap });
+  const fmt = a => (a.pickup ? (a.pickup === a.place ? 'wait@' : GDOT.L(a.pickup) + '>') : '') + GDOT.L(a.place);
+  return { id: level.id, name: level.name, territory: true, ...describe(level), keys: g.GOAL, par: s.par, solvable: s.solved, exhausted: s.exhausted, nodes: s.nodes,
+    solution: s.moves ? s.moves.map(fmt) : null, waits: s.moves ? s.moves.filter(a => a.pickup).length : null, greedy, random, ms: Date.now() - t0 };
+}
+export const HEADER_T = ['level'.padEnd(15), 'keys', ' par', 'lifts', ' greedy', 'g-avg', 'g-best', ' g-lost', ' random', ' nodes'].join(' ');
+export function rowT(a) {
+  const n = x => (x == null ? '-' : (Math.round(x * 10) / 10).toString());
+  return [(a.name || a.id).padEnd(15), String(a.keys).padStart(4), (a.solvable ? String(a.par) : '-').padStart(4), String(a.waits == null ? '-' : a.waits).padStart(5),
+    pct(a.greedy.winRate).padStart(7), n(a.greedy.avgTurns).padStart(5), n(a.greedy.best).padStart(6), pct(a.greedy.deadRate).padStart(7), pct(a.random.winRate).padStart(7),
+    (String(a.nodes) + (a.exhausted ? '+' : '')).padStart(7)].join(' ');
+}
+
 /* ================= the whole report ================= */
 export function describe(level) {
   const g = GDOT.createGame(level);
@@ -290,10 +350,12 @@ function cli() {
   if (which) levels = levels.filter((l, i) => l.id === which || String(i + 1) === which);
   if (!levels.length) { console.error('no such level'); process.exit(1); }
   const opts = { rollouts: +opt('--rollouts', 2000), budget: +opt('--budget', 150000), seed: +opt('--seed', 1) };
-  const out = levels.map(l => analyze(l, opts));
+  const out = levels.map(l => l.rules === 'territory' ? analyzeTerritory(l, { ...opts, rollouts: Math.min(opts.rollouts, 1000), budget: Math.max(opts.budget, 400000) }) : analyze(l, opts));
   if (args.includes('--json')) { console.log(JSON.stringify(out, null, 1)); return; }
-  console.log(HEADER);
+  let last = null;
   for (const a of out) {
+    const hd = a.territory ? HEADER_T : HEADER; if (hd !== last) { console.log(hd); last = hd; }
+    if (a.territory) { console.log(rowT(a)); if (args.includes('--show')) console.log(`   ${a.creatures.join(', ') || 'no creatures'} · start ${a.start.join('/')}${a.required.length ? ' · starfish ' + a.required.join(' ') : ''}\n   par line: ${a.solution ? a.solution.join(' ') : '-'} · ${a.ms} ms`); continue; }
     console.log(row(a));
     if (args.includes('--show')) {
       console.log(`   ${a.creatures.join(', ') || 'no creatures'} · terrain ${JSON.stringify(a.terrain)} · start ${a.start.join('/')}${a.required.length ? ' · required ' + a.required.join(' ') : ''}`);

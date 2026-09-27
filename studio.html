@@ -18,7 +18,7 @@
   <header>
     <h1>G.</h1>
     <div class="zone" id="zone"></div>
-    <div class="hud"><div><span>Turn</span><b id="turn">0</b></div></div>
+    <div class="hud"><div><span>Turn</span><b id="turn">0</b></div><div id="parbox" hidden title="the fewest presses that clear this tank"><span>Par</span><b id="par">0</b></div><div id="bestbox" hidden><span>Best</span><b id="best">0</b></div></div>
   </header>
 
   <div class="plate" id="plate" tabindex="0" aria-label="Keyboard tank">
@@ -64,6 +64,7 @@
     <div class="row"><label style="flex:1">Name <input type="text" id="e-name"></label></div>
     <div class="row"><label>Goal <input type="number" id="e-goal" min="1" max="20" title="tentacles held at once to clear"></label><label>Max tentacles <input type="number" id="e-max" min="0" max="20" placeholder="no limit" title="empty = no limit"></label></div>
     <div class="row"><label>Lifting <select id="e-lift"><option value="any">free</option><option value="one">one at a time</option><option value="none">never</option></select></label><label><input type="checkbox" id="e-finale"> finale (opens last)</label></div>
+    <div class="row"><label title="Territory tanks: the fewest presses that clear it">Par <input type="number" id="e-par" min="0" max="99"></label><button id="e-findpar" title="Search every line of play for the fewest presses (territory tanks)">Find par</button></div>
     <div class="row"><label title="Closed: only the keys you paint as water are the tank; everything else is algae"><input type="checkbox" id="e-closed"> closed tank</label><button class="pri" id="e-test">Test from start</button></div>
     <label class="coachbox" title="One line per moment: ready, 1, 2, ... (after that many tentacles), lift, won, eaten, letgo, fog, algae, rock, max, start, one, none. Tokens: {L} key cap (pulses), {~L} key cap (no pulse), {shark} icon, {G.} combo, {fog}, {goal}, {max}, {Hold}, {hold}, {next}.">Coach lines (shown under the tank; mostly for tutorial tanks)
       <textarea id="e-coach" spellcheck="false" placeholder="ready: Press {L} to start.&#10;1: That is a {tentacle}. It stays.&#10;won: Clear! {G.} for the next tank."></textarea></label>
@@ -72,6 +73,7 @@
   <section>
     <h2>ZONE</h2>
     <div class="row"><label style="flex:1">Name <input type="text" id="z-name"></label><label>Look <select id="z-env"></select></label></div>
+    <div class="row"><label title="classic: reach the goal, a bite kills. territory: fill every open key in the fewest presses; creatures take keys">Rules <select id="z-rules"><option value="">classic</option><option value="territory">territory</option></select></label></div>
     <div class="row"><label title="Played first by new players: tanks in order, a death retries the same tank, coach lines guide it; players can skip it"><input type="checkbox" id="z-tut"> tutorial zone</label></div>
     <div class="row"><label style="flex:1" title="The key each tank is named after, in order">Tank keys <input type="text" id="z-keys" placeholder="A S D F G H J K"></label></div>
     <div class="row"><button id="z-new">New zone</button><button id="z-up">↑</button><button id="z-down">↓</button><button id="z-del">Delete zone</button></div>

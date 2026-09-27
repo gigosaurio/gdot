@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { analyze, row, HEADER, LEVELS_JS, loadLevels, loadZones, laneKeys } from './solver.mjs';
+import { analyze, row, HEADER, analyzeTerritory, rowT, HEADER_T, LEVELS_JS, loadLevels, loadZones, laneKeys } from './solver.mjs';
 import { generate } from './generate.mjs';
 
 const require = createRequire(import.meta.url);
@@ -33,6 +33,9 @@ export function expand(spec) {
   if (spec.lift && spec.lift !== 'any') level.lift = spec.lift;
   if (spec.ecology) level.ecology = spec.ecology;
   if (spec.coach) level.coach = spec.coach; // tutorial lines, see gdot.js (coach)
+  if (spec.closed) { // a closed tank: only these keys are the tank (territory tanks; a starfish opens the algae around it)
+    const t = new Set(water); for (const k of codes(spec.rock)) t.add(k); level.tank = [...t];
+  }
   const water = new Set(codes(spec.water)); for (const s of level.start) water.add(s);
   for (const t of ['reef', 'cave']) for (const k of codes(spec[t])) { level.terrain[k] = t; water.add(k); }
   for (const t of ['rock', 'algae']) for (const k of codes(spec[t])) { level.terrain[k] = t; water.delete(k); }
@@ -172,7 +175,7 @@ export function onKey(level, key) {
   if (moved) moved.start = [key];
   return moved;
 }
-export const zoneMeta = () => ZONES.map(({ id, name, env, keys, tutorial }) => (tutorial ? { id, name, env, keys, tutorial: true } : { id, name, env, keys }));
+export const zoneMeta = () => ZONES.map(({ id, name, env, keys, tutorial, rules }) => Object.assign({ id, name, env, keys }, tutorial ? { tutorial: true } : {}, rules ? { rules } : {}));
 // The written campaign: zone order, then tank order; each level gets its zone (and the finale flag).
 export function arrange(byName) {
   const out = [], missing = [];
@@ -188,9 +191,11 @@ export function arrange(byName) {
 export function buildLevel(entry, opts = {}) {
   const slot = slotOf(entry.name);
   if (entry.spec) {
-    const l = expand({ id: GDOT.slug(entry.name), name: entry.name, ...entry.spec });
+    const terr = !!(slot && slot.zone.rules === 'territory');
+    const l = expand({ id: GDOT.slug(entry.name), name: entry.name, ...(terr ? { closed: true } : {}), ...entry.spec });
     const moved = slot ? onKey(l, slot.key) : l;
     if (!moved) return { level: null, analysis: null, rejected: { 'start is not on the row of its key': 1 }, attempts: 0 };
+    if (terr) { const r = GDOT.solvePar(GDOT.resolveLevel(moved, { rules: 'territory' }), { budget: opts.parBudget || 600000 }); if (r.solved) moved.par = r.par; else delete moved.par; }
     return { level: moved, analysis: null };
   }
   const recipe = { ...entry.recipe, name: entry.name, id: GDOT.slug(entry.name) };
@@ -258,7 +263,11 @@ function cli() {
   }
   if (args.includes('--check')) {
     console.log(HEADER);
-    for (const { e, level } of built) { const a = analyze(level, { rollouts: +opt('--rollouts', 1500), budget: +opt('--budget', 100000) }); console.log(row(a) + (a.solvableWithPickups && !a.solvable ? ' (needs lift: ' + a.pickupTurns + ' turns)' : '')); }
+    let last = null;
+    for (const { e, level } of built) { const z = (slotOf(e.name) || {}).zone; const terr = z && z.rules === 'territory';
+      const hd = terr ? HEADER_T : HEADER; if (hd !== last) { console.log(hd); last = hd; }
+      if (terr) { const a = analyzeTerritory(GDOT.resolveLevel(level, { rules: 'territory' }), { rollouts: 600 }); console.log(rowT(a)); if (args.includes('--line')) console.log('   ' + (a.solution || []).join(' ')); continue; }
+      const a = analyze(level, { rollouts: +opt('--rollouts', 1500), budget: +opt('--budget', 100000) }); console.log(row(a) + (a.solvableWithPickups && !a.solvable ? ' (needs lift: ' + a.pickupTurns + ' turns)' : '')); }
   }
   if (args.includes('--write')) {
     // assemble in campaign order: what was built now, else (with --only) the level already in the file with that id

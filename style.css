@@ -213,3 +213,10 @@ body.intro .coach{background:transparent;border-color:transparent;color:var(--mu
 .k .mark.intent{right:0;top:0;width:38%;height:38%;color:var(--danger);transform-origin:50% 50%}
 .k .mark.stay{right:1px;top:1px;width:30%;height:30%;color:var(--muted)}
 .k.aimed::before{content:'';position:absolute;inset:0;border:calc(var(--u)*.06) dashed var(--danger);border-radius:2px;pointer-events:none;z-index:2}
+/* ---- territory ---- */
+.k.taken{box-shadow:inset 0 0 0 calc(var(--u)*.06) var(--danger)} .k .mark.tk{right:2px;bottom:2px;width:38%;height:38%;color:var(--held);background:#fff;border-radius:50%;opacity:.85}
+.k .mark.tk::after{content:'';position:absolute;left:-2px;right:-2px;top:50%;height:2px;background:var(--danger);transform:rotate(-40deg)}
+.k.grew{box-shadow:0 0 0 3px var(--algae)}
+.tray.terr{align-items:center} .tray .tcount{font-family:var(--disp);font-weight:400;font-size:13px;margin-left:6px;color:var(--ink)}
+.chip.parc{background:var(--key);font-family:var(--disp);font-size:14px} .chip.parc small{font-size:11px;color:var(--muted)} .chip.parc.made{background:#f6e7c1;box-shadow:0 0 0 2px #d4b24c}
+.tank.par{box-shadow:0 0 0 2px #d4b24c} .tank.replay{cursor:pointer}
