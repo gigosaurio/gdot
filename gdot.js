@@ -469,11 +469,11 @@ function coachSet(m){
 }
 const tipsOn=()=>!STUDIO&&SET.tips!==false&&!(LV&&isTut(zoneOf(LV)));
 // queue a tip; once per player (force: every time, e.g. a death explained in the tutorial)
-function tip(id,force){
+function tip(id,force,first){
   if(G&&G.MODE==='territory'&&TIPS_T[id]) id='t-'+id; // the territory wording is a tip of its own
   if(!tipText(id)) return;
   if(!force&&(!tipsOn()||(PROG.tips||{})[id])) return;
-  if(!COACH.tip.includes(id)) COACH.tip.push(id);
+  if(!COACH.tip.includes(id)){ if(first) COACH.tip.unshift(id); else COACH.tip.push(id); } // first: said before anything already queued
 }
 // a placement retires the tips that were on screen; ones queued but not yet drawn stay
 const END_TIP=id=>/^(t-)?(dead-|sent$|won$|left$|over-par$)/.test(id); // said on the end screen: seen once shown
@@ -559,7 +559,7 @@ window.addEventListener('keydown',e=>{
       T('death',{turn:G.turn,tentacles:G.fingers.size,by:'restart'}); NEXT=pickNext(LV.id); PROG.cur=NEXT; saveProgress(); gaveUp=NEXT!==LV.id&&!isTut(zoneOf(LV)); }
     if((G.phase==='dead'||G.phase==='won'||G.phase==='play')&&NEXT&&NEXT!==LV.id){ const i=levelIndex(NEXT); if(i>=0) setCur(i); refreshEditor(); }
     buildRuntime(); refused.set('Period','combo'); if(gaveUp) tip('sent');
-    if(G.START.includes('KeyG')){ startRun(); place('KeyG'); if(G.phase==='play'&&mustHold()){ tip('g-start'); render(); } } else { G.fingers.clear(); render(); }
+    if(G.START.includes('KeyG')){ startRun(); place('KeyG'); if(G.phase==='play'&&mustHold()){ tip('g-start',false,true); render(); } } else { G.fingers.clear(); render(); }
     return;
   }
   if(inIntro()){ render(); return; }

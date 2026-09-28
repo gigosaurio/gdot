@@ -172,8 +172,9 @@ function engineTests() {
   eq(GDOT.rowOffset('KeyG', 'KeyT'), null, 'no sideways move between rows');
   for (const level of levels) {
     const played = GDOT.resolveLevel(level, zones.find(z => z.id === level.zone));
-    let s = solve(played, { budget: 60000 });
-    if (!s.solved) s = solve(played, { budget: 60000, pickups: true });
+    let s = played.rules === 'territory' ? GDOT.solvePar(played, { budget: 300000 }) : solve(played, { budget: 60000 });
+    if (!s.solved && played.rules !== 'territory') s = solve(played, { budget: 60000, pickups: true });
+    if (played.rules === 'territory' && s.solved) eq(s.par, level.par, `${level.name}: par in levels.js matches the solver`);
     ok(s.solved, `${level.name}: solver finds a clear`);
     if (s.solved) { const r = GDOT.createGame(played); for (const m of s.moves) { if (m.pickup) GDOT.pickup(r, m.pickup); GDOT.place(r, m.place); } eq(r.phase, 'won', `${level.name}: the line replays to a clear`); }
   }
@@ -260,9 +261,9 @@ function engineTests() {
 /* ================= levels: tutorial coach lines ================= */
 {
   const levels = loadLevels(), zones = loadZones();
-  const WORDS = new Set(['hold', 'Hold', 'next', 'goal', 'max', 'G.', 'fog', 'tentacle', 'starfish', 'lock', 'bones', 'algae', 'rock', 'reef', 'cave', ...GDOT.TYPES]);
+  const WORDS = new Set(['hold', 'Hold', 'next', 'par', 'goal', 'max', 'G.', 'fog', 'tentacle', 'starfish', 'lock', 'bones', 'algae', 'rock', 'reef', 'cave', ...GDOT.TYPES]);
   const LABELS = new Set(GDOT.KEYS.map(k => k.label).filter(Boolean).concat(['Space']));
-  const MOMENTS = /^(ready|\d+|lift|won|eaten|letgo|fog|algae|rock|max|start|one|none)$/;
+  const MOMENTS = /^(ready|\d+|lift|taken|grow|won|eaten|overrun|letgo|fog|algae|rock|reach|max|start|one|none)$/;
   const bad = [];
   for (const l of levels) for (const [m, line] of Object.entries(l.coach || {})) {
     if (!MOMENTS.test(m)) bad.push(l.id + ': moment ' + m);
@@ -749,7 +750,7 @@ async function browserTests() {
     await js(`document.getElementById('b-use').click(); document.getElementById('b-use').click(); 1`); ok(!(await js('STORE.dirty')), 'Use levels.js follows the file again');
     ok((await js('backups().length')) >= 1, 'the replaced copy is in Backups');
     // ---- an edited copy follows levels.js for every tank it did not touch
-    { const J = JSON.stringify, L0 = levels[0], L1 = levels[1], L2 = levels[2];
+    { const J = JSON.stringify, L0 = LIVE.levels[0], L1 = LIVE.levels[1], L2 = LIVE.levels[2]; // about merging with levels.js as shipped
       await js(`(()=>{ const base=clone(BUILTIN); base.levels[0].goal=3; base.levels.splice(2,1); const mine=clone(base); mine.levels[1].name='Mine'; localStorage.setItem('gdot-levels-v2', JSON.stringify({levels:mine.levels,zones:mine.zones,dirty:true,base:'old',baseCopy:base})); })(); 1`);
       await load(PAGE);
       eq(await js(`STORE.levels.find(l=>l.id===${J(L0.id)}).goal`), L0.goal, 'a tank untouched here follows levels.js');
@@ -761,8 +762,8 @@ async function browserTests() {
       eq(await js('[STORE.levels[0].name, STORE.levels[0].goal, STORE.clash]'), ['Both', 3, ['Both']], 'changed on both sides: this browser keeps its version and names it');
       await js(`document.getElementById('editor').click(); 1`); ok(!(await js(`document.getElementById('e-banner').hidden`)) && /Both/.test(await js(`document.getElementById('b-text').textContent`)), 'the banner names it');
       await js(`document.getElementById('editor').click(); localStorage.removeItem('gdot-levels-v2'); 1`); await load(PAGE); }
-    // ---- merge details the review asked for
-    { const J = JSON.stringify, setCopy = code => js(`(()=>{ ${code}; localStorage.setItem('gdot-levels-v2', JSON.stringify({levels:mine.levels,zones:mine.zones,dirty:true,base:'old',baseCopy:base})); })(); 1`);
+    // ---- merge details the review asked for (the page follows levels.js as shipped here)
+    { const levels = LIVE.levels, J = JSON.stringify, setCopy = code => js(`(()=>{ ${code}; localStorage.setItem('gdot-levels-v2', JSON.stringify({levels:mine.levels,zones:mine.zones,dirty:true,base:'old',baseCopy:base})); })(); 1`);
       // levels.js reordered two tanks (their starts swapped with them); this copy only renamed another tank
       await setCopy(`const base=clone(BUILTIN); const z=base.levels.filter(l=>l.zone===BUILTIN.levels[0].zone); const i=base.levels.indexOf(z[0]), j=base.levels.indexOf(z[1]); [base.levels[i],base.levels[j]]=[base.levels[j],base.levels[i]]; [base.levels[i].start,base.levels[j].start]=[base.levels[j].start,base.levels[i].start]; const mine=clone(base); mine.levels[base.levels.length-1].name='Renamed'`);
       await load(PAGE);
@@ -784,7 +785,7 @@ async function browserTests() {
       eq(await js('STORE.levels[0].name'), 'Other tab', 'and shown');
       await js("localStorage.removeItem('gdot-levels-v2'); 1"); }
     // ---- preview details: placing ends on a tank switch; play's wake and cave rules; the ghost is a layer
-    { await load(PAGE); await js(`document.getElementById('editor').click(); 1`);
+    { const levels = LIVE.levels; await load(PAGE); await js(`document.getElementById('editor').click(); 1`);
       const withC = levels.find((l, i) => i > 0 && l.creatures.length);
       await js(`CUR=levelIndex(${JSON.stringify(withC.id)}); buildRuntime(); refreshEditor(); E.sel=0; document.getElementById('c-place').click(); 1`);
       eq(await js('E.placing'), true, 'placing');
