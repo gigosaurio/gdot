@@ -1,0 +1,26 @@
+# Deploys g.gigomakes.com on every push to main (and by hand from the Actions tab).
+# Needs two repository secrets (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN   a token from dash.cloudflare.com → My Profile → API Tokens, template "Edit Cloudflare Workers",
+#                          plus D1 Edit on the account (the telemetry database)
+#   CLOUDFLARE_ACCOUNT_ID  the account id shown on the Workers overview page
+name: deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency: deploy
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Rules and tools (no browser here)
+        run: GDOT_CHROME=/nonexistent node test/smoke.mjs
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
