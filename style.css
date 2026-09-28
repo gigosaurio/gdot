@@ -221,3 +221,28 @@ body.intro .coach{background:transparent;border-color:transparent;color:var(--mu
 .chip.parc{background:var(--key);font-family:var(--disp);font-size:14px} .chip.parc small{font-size:11px;color:var(--muted)} .chip.parc.made{background:#f6e7c1;box-shadow:0 0 0 2px #d4b24c}
 .tank.par{box-shadow:0 0 0 2px #d4b24c} .tank.replay{cursor:pointer}
 .tank.ret{box-shadow:0 0 0 2px var(--ok)}
+/* ---- alive: the creature layer, bubbles, sway, water, ink ---- */
+:root{--ink:#2b2f4a}
+.plate{background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.05) 0 5px,transparent 5px 13px),repeating-linear-gradient(45deg,rgba(0,0,0,.03) 0 3px,transparent 3px 11px)}
+.bubbles{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.bubble{position:absolute;bottom:-8px;width:5px;height:5px;border:1px solid rgba(255,255,255,.6);border-radius:50%;opacity:0;animation:rise 7s steps(16,end) infinite}
+@keyframes rise{0%{transform:translateY(0);opacity:0}8%{opacity:.75}100%{transform:translateY(calc(var(--u)*-6.9));opacity:0}}
+.k.t-algae svg{transform-origin:50% 100%;animation:sway 3.2s steps(3,end) infinite}
+@keyframes sway{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+#critters{position:absolute;inset:0;pointer-events:none;z-index:3}
+.cr{position:absolute;left:0;top:0;width:var(--u);height:var(--u);display:flex;align-items:center;justify-content:center;transition:transform .32s steps(4,end)}
+.cr i{display:block;width:80%;height:56%;transition:transform .3s steps(3,end)} .cr i svg{width:100%;height:100%;display:block;animation:bob 2.4s steps(3,end) infinite;animation-delay:var(--d,0s)}
+.cr.w i{transform:scaleX(-1)}
+.cr.pred{color:var(--danger)} .cr.prey{color:var(--prey)} .cr.t-jelly{color:#8a4fb8} .cr.t-turtle{color:#3f7a3a} .cr.t-ray{color:#4a5e8a}
+.cr.seg i{width:56%;height:44%}
+.cr.bloom i{transform:scale(1.85);opacity:.85;filter:drop-shadow(0 0 3px rgba(138,79,184,.6))} .cr.bloom.w i{transform:scale(-1.85,1.85)}
+.cr.asleep{opacity:.5}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-9%)}}
+.board.dead .cr{filter:saturate(.25);opacity:.75}
+body.edit .cr{opacity:.92}
+.k.inked{background:#3b3f5c;color:#cfd3ea;border-color:#6b70a0 #1e2138 #1e2138 #6b70a0} .k.inked .sub{color:#aeb3d6} .k.inked.fresh{box-shadow:inset 0 0 0 3px #5c62a0}
+.k .mark.inkm{inset:12%;color:#1c1f33;opacity:.55} .k.inked.held{background:#4a4f74}
+.chip.inkc{gap:3px;background:var(--key)} .chip.inkc .inki{color:var(--ink);width:18px;height:14px} .chip.inkc.out{opacity:.5}
+.coach .ci.ink{color:var(--ink)} .coach .ci.snake,.coach .ci.ray{color:var(--danger)} .coach .ci.jelly{color:#8a4fb8} .coach .ci.turtle{color:#3f7a3a}
+.legend i svg{shape-rendering:crispEdges}
+@media (prefers-reduced-motion:reduce){.cr{transition:none} .cr i svg{animation:none} .bubble{display:none} .k.t-algae svg{animation:none}}

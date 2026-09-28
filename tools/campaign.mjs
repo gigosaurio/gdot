@@ -32,6 +32,7 @@ export function expand(spec) {
   if (spec.max) level.maxTentacles = spec.max;
   if (spec.lift && spec.lift !== 'any') level.lift = spec.lift;
   if (spec.ecology) level.ecology = spec.ecology;
+  if (spec.ink > 0) level.ink = Math.floor(spec.ink);
   if (spec.coach) level.coach = spec.coach; // tutorial lines, see gdot.js (coach)
   const water = new Set(codes(spec.water)); for (const s of level.start) water.add(s);
   for (const t of ['reef', 'cave']) for (const k of codes(spec[t])) { level.terrain[k] = t; water.add(k); }
@@ -42,7 +43,7 @@ export function expand(spec) {
   for (const c of spec.creatures || []) {
     const p = GDOT.PRESETS[c.type] || {};
     const cr = { type: c.type, mover: c.mover || (c.path ? 'path' : p.mover || 'dir'), dir: c.dir || p.dir || 'E', speed: c.speed ?? p.speed ?? 1, size: c.size || p.size || 'big', prey: c.prey ?? !!p.prey, cave: c.cave ?? !!p.cave, wake: c.wake ?? !!p.wake };
-    for (const k of ['eats', 'chases', 'flees', 'range']) if (c[k] != null) cr[k] = c[k];
+    for (const k of ['eats', 'chases', 'flees', 'range', 'length', 'sweep', 'bloom', 'phase']) if (c[k] != null) cr[k] = c[k];
     if (c.path) {
       cr.path = codes(c.path); cr.loop = c.loop || 'pingpong'; cr.pathIndex = c.pathIndex || 0; cr.at = cr.path[0];
       for (let i = 1; i < cr.path.length; i++) if (!GDOT.NEI[cr.path[i - 1]].includes(cr.path[i])) console.warn(`${spec.id}: path "${c.path}" jumps at ${GDOT.L(cr.path[i])}`);
@@ -214,7 +215,7 @@ export function parseOnly(s) {
 /* ================= drawing ================= */
 export function draw(level) {
   const g = GDOT.createGame(level); const lanes = laneKeys(level); const at = {};
-  for (const c of g.creatures) at[c.pos] = { shark: 'S', barracuda: 'B', crab: 'C', eel: 'E', urchin: 'U', fish: 'F' }[c.type] || '?';
+  for (const c of g.creatures) at[c.pos] = { shark: 'S', barracuda: 'B', crab: 'C', eel: 'E', urchin: 'U', fish: 'F', snake: 'N', ray: 'R', jelly: 'J', turtle: 'T', seal: 'L', pilot: 'P' }[c.type] || '?';
   const rows = [];
   for (let r = 0; r < 6; r++) {
     let line = '';

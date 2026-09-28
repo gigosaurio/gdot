@@ -80,7 +80,13 @@ const PRESETS={
   fish:     {label:'Fish',      size:'small', mover:'flee', dir:'E',  speed:0.5, prey:true,  cave:false, wake:false, flees:['tentacle']},
   seal:     {label:'Seal',      size:'big',   mover:'chase',dir:'E',  speed:1,   prey:false, cave:false, wake:false, chases:['fish','pilot','tentacle'], eats:['fish','pilot']},
   pilot:    {label:'Pilot fish',size:'small', mover:'chase',dir:'E',  speed:1,   prey:true,  cave:false, wake:false, chases:['shark']},
+  // creatures that use more than one key (territory zones)
+  snake:    {label:'Sea snake', size:'big',   mover:'path', dir:'E',  speed:1,   prey:false, cave:false, wake:false, eats:['fish'], length:3},   // its body trails 2 keys behind its head; all of it is its own
+  ray:      {label:'Ray',       size:'big',   mover:'dir',  dir:'E',  speed:2,   prey:false, cave:false, wake:false, sweep:true},                // glides 2 keys a press and sweeps every key it crosses
+  jelly:    {label:'Jellyfish', size:'small', mover:'still',dir:'E',  speed:0,   prey:false, cave:false, wake:false, bloom:true},                // every other press it blooms over the keys around it
+  turtle:   {label:'Turtle',    size:'big',   mover:'dir',  dir:'W',  speed:0.5, prey:false, cave:false, wake:false, eats:['jelly']},            // slow; eats jellyfish
 };
+const INK_TURNS=2; // an ink cloud keeps creatures out for this many presses
 const TYPES=Object.keys(PRESETS);
 const TARGETS=['tentacle',...TYPES];
 const MOVERS=['path','dir','chase','flee','still'];
@@ -124,7 +130,8 @@ function createGame(level){
   const g={level:LV,phase:'ready',turn:0,fingers:new Set(),revealed:new Set(),
     TER,START:(LV.start||[]).filter(k=>KEYMAP[k]),REQ:(LV.required||[]).filter(k=>KEYMAP[k]),GOAL:max?Math.min(LV.goal||8,max):(LV.goal||8),
     MAX:max,LIFT:LIFTS.includes(LV.lift)?LV.lift:'any',liftPending:false,lifted:null,creatures:[],last:null,
-    MODE:LV.rules==='territory'?'territory':'classic',grown:new Set()};
+    MODE:LV.rules==='territory'?'territory':'classic',grown:new Set(),ink:{},inkLeft:0,newest:null};
+  if(g.MODE==='territory') g.inkLeft=Math.max(0,Math.floor(+LV.ink||0)); // squirts of ink this tank gives you
   if(g.MODE==='territory'){ g.MAX=0; // fill everything: no cap
     if(!Array.isArray(LV.tank)){ // an open tank: close it around the water joined to its start keys (and its own rock, reef, cave)
       const inside=new Set(), q=[...g.START];
@@ -136,6 +143,7 @@ function createGame(level){
     const eco=ecologyOf(c,LV);
     const r={id:n,type:c.type,label:(PRESETS[c.type]||{}).label||c.type,size:c.size||'big',mover:c.mover||'dir',dir:c.dir||'E',speed:c.speed==null?1:Number(c.speed),
       prey:!!c.prey,cave:!!c.cave,wake:!!c.wake,eats:eco.eats,chases:eco.chases,flees:eco.flees,range:eco.range,
+      length:Math.max(1,Math.floor(+(c.length!=null?c.length:(PRESETS[c.type]||{}).length)||1)),sweep:!!(c.sweep!=null?c.sweep:(PRESETS[c.type]||{}).sweep),bloom:!!(c.bloom!=null?c.bloom:(PRESETS[c.type]||{}).bloom),phase:(+c.phase||0)&1,
       seen:false,awake:!c.wake,alive:true,acc:0,run:[],i:0,pos:null,prev:null};
     if(r.mover==='path'){ r.run=expandPath(c); r.i=Math.min(c.pathIndex||0,Math.max(0,r.run.length-1)); if(!r.run.length){r.mover='still';r.pos=KEYMAP[c.at]?c.at:null;} }
     else r.pos=KEYMAP[c.at]?c.at:null;
@@ -146,7 +154,12 @@ function createGame(level){
   if(g.MODE==='territory') tally(g);
   return g;
 }
-function cloneGame(g){ return Object.assign({},g,{fingers:new Set(g.fingers),revealed:new Set(g.revealed),grown:new Set(g.grown||[]),creatures:g.creatures.map(c=>Object.assign({},c)),last:null}); }
+function cloneGame(g){ return Object.assign({},g,{fingers:new Set(g.fingers),revealed:new Set(g.revealed),grown:new Set(g.grown||[]),ink:Object.assign({},g.ink||{}),creatures:g.creatures.map(c=>Object.assign({},c)),last:null}); }
+// The keys a creature covers right now: its key, the body of a long path creature (the keys it just came
+// through), and, on a bloom press, the ring around a blooming one. A tentacle under any of them is taken.
+function body(c){ if(c.length<2||c.mover!=='path'||!c.run||c.run.length<2) return []; const L=c.run.length, out=[]; for(let k=1;k<c.length&&k<L;k++){ const p=c.run[(c.i-k+L*4)%L]; if(p!==c.pos&&!out.includes(p)) out.push(p); } return out; }
+const bloomNow=(g,c)=>!!c.bloom&&c.alive&&((g.turn+c.phase)&1)===1;
+function footprint(g,c){ const out=[c.pos,...body(c)]; if(bloomNow(g,c)) for(const n of NEI[c.pos]) if(!isRock(g,n)&&!out.includes(n)) out.push(n); return out; }
 // Territory: the keys you have to fill. Grip keys joined to a start key through grip keys; a key where a
 // creature never moves (an urchin) is a wall. Grows when a starfish opens algae, or when that creature is eaten.
 function territory(g){
@@ -157,7 +170,7 @@ function territory(g){
   return seen;
 }
 // A creature's key is its tile: the tank is clear when every key of the territory is yours or has a creature on it.
-const creatureKeys=g=>{ const s=new Set(); for(const c of g.creatures) if(c.alive&&!c.prey) s.add(c.pos); return s; };
+const creatureKeys=g=>{ const s=new Set(); for(const c of g.creatures) if(c.alive&&!c.prey) for(const k of footprint(g,c)) s.add(k); return s; };
 function unfilled(g){ const t=territory(g), ck=creatureKeys(g); let n=0; for(const k of t) if(!g.fingers.has(k)&&!ck.has(k)) n++; return n; }
 // keys you can still fill right now (the live goal the tray shows)
 function fillable(g){ const t=territory(g), ck=creatureKeys(g); let n=0; for(const k of t) if(!ck.has(k)) n++; return n; }
@@ -165,7 +178,8 @@ function fillable(g){ const t=territory(g), ck=creatureKeys(g); let n=0; for(con
 function tally(g){ const t=territory(g), ck=creatureKeys(g); let fill=0, left=0; for(const k of t) if(!ck.has(k)){ fill++; if(!g.fingers.has(k)) left++; } g.tsize=t.size; g.GOAL=fill; g.left=left; return left; }
 
 const isRock=(g,k)=>g.TER[k]==='rock';
-const passable=(g,k)=>!!KEYMAP[k]&&!isRock(g,k);
+const inked=(g,k)=>!!(g.ink&&g.ink[k]);
+const passable=(g,k)=>!!KEYMAP[k]&&!isRock(g,k)&&!inked(g,k); // ink keeps creatures out while it lasts
 const grip=(g,k)=>{ const t=g.TER[k]; return t!=='algae'&&t!=='rock'; };
 
 function distMap(g,sources,cap){ // BFS over passable keys
@@ -179,10 +193,11 @@ function targetKeys(g,c,kind){
   const out=[]; for(const o of g.creatures) if(o!==c&&o.alive&&o.type===kind) out.push(o.pos); return out;
 }
 function moveOnce(g,c){
-  if(c.mover==='path'){ c.i=(c.i+1)%c.run.length; c.pos=c.run[c.i]; return; }
+  if(c.mover==='path'){ const ni=(c.i+1)%c.run.length; if(inked(g,c.run[ni])) return; c.i=ni; c.pos=c.run[c.i]; return; }
   if(c.mover==='dir'){
+    const wall=k=>!k||isRock(g,k)||inked(g,k);
     let n=DIRS[c.pos][c.dir];
-    if(!n||isRock(g,n)){ c.dir=OPP[c.dir]; n=DIRS[c.pos][c.dir]; if(!n||isRock(g,n)) return; }
+    if(wall(n)){ c.dir=OPP[c.dir]; n=DIRS[c.pos][c.dir]; if(wall(n)) return; }
     c.pos=n; return;
   }
   if(c.mover==='chase'){
@@ -238,12 +253,14 @@ function stepAll(g){
 // as {id, from, to, route}. A creature that stays put this turn has to===from. Only seen, awake, living
 // creatures; nothing is changed.
 function intents(g){
-  const h=cloneGame(g), out=[];
+  const h=cloneGame(g), out=[]; h.turn++; tickInk(h);
   for(const c of h.creatures){ if(!c.alive||!c.seen||!c.awake) continue; const from=c.pos, route=[from]; const n=stepsThisTurn(c);
     for(let i=0;i<n;i++){ moveOnce(h,c); if(c.pos!==route[route.length-1]) route.push(c.pos); }
-    out.push({id:c.id,from,to:c.pos,route}); }
+    const keys=footprint(h,c); if(c.sweep) for(const k of route.slice(1)) if(!keys.includes(k)) keys.push(k);
+    out.push({id:c.id,from,to:c.pos,route,keys,bloom:bloomNow(h,c)}); }
   return out;
 }
+function tickInk(g){ if(!g.ink) return; for(const k in g.ink){ if(--g.ink[k]<=0) delete g.ink[k]; } }
 // Back-compat single-creature step (tools use it to preview where a creature goes next).
 function stepCreature(g,c){ const n=stepsThisTurn(c); let moved=false; for(let i=0;i<n;i++){ const b=c.pos; moveOnce(g,c); if(c.pos!==b) moved=true; } return moved; }
 // Drawn on the board? (the UI adds its own designer/editor overrides)
@@ -291,11 +308,12 @@ function place(g,code){
   if(why0==='held') return {type:'noop',code};
   if(why0) return {type:'refused',reason:why0,code};
   g.phase='play'; g.turn++; if(!g.startKey) g.startKey=code; // the start key this run began on
+  tickInk(g);
   for(const c of g.creatures){ c.prev=c.pos; c.vis0=isVisible(g,c); }
   // 1. everything already seen and awake takes its steps (reacting to the board before the new tentacle lands);
   //    creatures that meet may eat each other
   const {stepped,meals}=stepAll(g);
-  g.fingers.add(code); g.liftPending=false; g.lifted=null;
+  g.fingers.add(code); g.liftPending=false; g.lifted=null; g.newest=code;
   // 2. reveal around the new tentacle
   reveal(g,code,1);
   // 3. discover creatures on revealed water (cave dwellers stay hidden inside caves)
@@ -334,10 +352,10 @@ function territoryEnd(g,code,ev){
   const taken=[], ate=[];
   for(const c of g.creatures) if(c.alive&&c.prey&&g.fingers.has(c.pos)){ c.alive=false; ate.push(c); reveal(g,c.pos,2); }
   for(const c of g.creatures){
-    if(!c.alive||c.prey||!g.fingers.has(c.pos)) continue;
-    if(hidden(g,c,c.pos)) continue;
+    if(!c.alive||c.prey) continue;
+    const keys=footprint(g,c); if(c.sweep&&c.route) for(const k of c.route.slice(1)) if(!keys.includes(k)) keys.push(k);
     const r=c.route||[c.prev], from=r.length>1?r[r.length-2]:c.prev;
-    g.fingers.delete(c.pos); taken.push({key:c.pos,by:c,from,landed:c.pos===code});
+    for(const k of keys){ if(!g.fingers.has(k)||hidden(g,c,k)) continue; g.fingers.delete(k); taken.push({key:k,by:c,from,landed:k===code}); }
   }
   if(ate.length) for(const c of g.creatures) if(c.alive&&!c.seen&&g.revealed.has(c.pos)&&g.TER[c.pos]!=='cave'){c.seen=true;ev.newly.push(c);}
   const grew=[];
@@ -355,6 +373,20 @@ function territoryEnd(g,code,ev){
   return (g.last=out);
 }
 
+// Ink (territory tanks that give it, level.ink): one press; everything moves first, then a cloud lands on your
+// newest tentacle and the keys around it, and no creature can enter those keys for the next INK_TURNS presses.
+function inkBlock(g){ if(g.MODE!=='territory') return 'mode'; if(g.phase!=='play') return 'phase'; if(!g.inkLeft) return 'empty'; if(!g.newest||!g.fingers.has(g.newest)) return 'nowhere'; return null; }
+function squirt(g){
+  const why=inkBlock(g); if(why) return {type:'refused',reason:'ink',why};
+  g.turn++; tickInk(g); for(const c of g.creatures){ c.prev=c.pos; c.vis0=isVisible(g,c); }
+  const {stepped,meals}=stepAll(g);
+  g.liftPending=false; g.lifted=null; g.inkLeft--;
+  const cloud=[g.newest,...NEI[g.newest]]; for(const k of cloud) g.ink[k]=INK_TURNS+1; // +1: this press's own fade already happened
+  const woke=[]; for(const c of g.creatures) if(c.alive&&!c.awake&&(g.fingers.has(c.pos)||NEI[c.pos].some(n=>g.fingers.has(n)))){c.awake=true;c.seen=true;woke.push(c);}
+  const ev=territoryEnd(g,null,{stepped,meals,woke,newly:[]});
+  if(ev.type==='placed') ev.type='inked'; ev.cloud=cloud; return ev;
+}
+
 /* ================= par: the fewest presses (territory) ================= */
 // A* over whole game states. A move is one press, alone or after a free lift ({pickup, place}; pickup
 // equal to place is a wait). The estimate below never overestimates, so the first clear found is the shortest. Returns {solved, par, moves, nodes, exhausted}.
@@ -365,17 +397,18 @@ function solvePar(level,opts){
     if(g.phase==='ready'||g.turn===0){ for(const k of g.START) out.push({place:k}); return out; }
     for(const k of legalPlacements(g)) out.push({place:k});
     if(g.LIFT!=='none') for(const f of g.fingers){ const h=cloneGame(g); if(!pickup(h,f)) continue; for(const k of legalPlacements(h)) out.push({pickup:f,place:k}); }
+    if(!inkBlock(g)) out.push({ink:true});
     return out; };
   const heap=[], push=n=>{ heap.push(n); let i=heap.length-1; while(i){ const p=(i-1)>>1; if(less(heap[p],heap[i])) break; [heap[p],heap[i]]=[heap[i],heap[p]]; i=p; } };
   const less=(a,b)=>a.f<b.f||(a.f===b.f&&a.turn>b.turn);
   const pop=()=>{ const top=heap[0], last=heap.pop(); if(heap.length){ heap[0]=last; let i=0; for(;;){ const l=2*i+1, r=l+1; let m=i; if(l<heap.length&&less(heap[l],heap[m])) m=l; if(r<heap.length&&less(heap[r],heap[m])) m=r; if(m===i) break; [heap[m],heap[i]]=[heap[i],heap[m]]; i=m; } } return top; };
   // Lower bound: territory size - tentacles - creatures that can hold a key. Only a press (+1 tentacle) lowers it, by one at most:
   // growth and meals only raise it, and at a clear every key is a tentacle or a creature's. So par stays exact.
-  const movers=g=>{ let m=0; for(const c of g.creatures) if(c.alive&&!c.prey&&c.mover!=='still'&&c.speed>0) m++; return m; };
+  const movers=g=>{ let m=0; for(const c of g.creatures) if(c.alive&&!c.prey&&(c.mover!=='still'&&c.speed>0||c.bloom)) m+=c.bloom?7:c.length; return m; };
   const est=g=>Math.max(0,g.tsize-g.fingers.size-movers(g),Math.ceil(g.left/(1+movers(g))));
   const deadline=opts&&opts.ms?Date.now()+opts.ms:0;
   const pathOf=n=>{ const p=[]; for(let x=n;x&&x.parent;x=x.parent) p.unshift(x.act); return p; };
-  const rebuild=n=>{ const g=createGame(level); for(const a of pathOf(n)){ if(a.pickup) pickup(g,a.pickup); place(g,a.place); } return g; }; // nodes stay small: no game copies kept
+  const rebuild=n=>{ const g=createGame(level); for(const a of pathOf(n)){ if(a.ink){ squirt(g); continue; } if(a.pickup) pickup(g,a.pickup); place(g,a.place); } return g; }; // nodes stay small: no game copies kept
   const best=new Map(); let nodes=0;
   push({f:est(g0),turn:0,won:false,parent:null,act:null}); best.set(stateKey(g0),0);
   while(heap.length){
@@ -385,7 +418,7 @@ function solvePar(level,opts){
     const g=rebuild(n);
     for(const a of moves(g)){
       const h=cloneGame(g); if(a.pickup&&!pickup(h,a.pickup)) continue;
-      const ev=place(h,a.place); if(ev.type==='refused'||ev.type==='noop'||ev.type==='dead') continue;
+      const ev=a.ink?squirt(h):place(h,a.place); if(ev.type==='refused'||ev.type==='noop'||ev.type==='dead') continue;
       const k=stateKey(h); if(best.has(k)&&best.get(k)<=h.turn) continue; best.set(k,h.turn);
       push({f:h.turn+(h.phase==='won'?0:est(h)),turn:h.turn,won:h.phase==='won',parent:n,act:a});
     }
@@ -475,11 +508,12 @@ function legalPlacements(g){
 function bits(set){ let a=0,b=0,c=0; for(const k of set){ const i=IDX[k]; if(i<30) a|=1<<i; else if(i<60) b|=1<<(i-30); else c|=1<<(i-60); } return a.toString(36)+'.'+b.toString(36)+'.'+c.toString(36); }
 // Canonical key of the whole game state (fingers, fog, every creature) for search memo tables.
 function stateKey(g){
-  return g.phase[0]+(g.startKey&&g.START.length>1?'s'+IDX[g.startKey]:'')+(g.liftPending?'L'+(g.lifted?IDX[g.lifted]:''):'')+bits(g.fingers)+'|'+bits(g.revealed)+(g.grown&&g.grown.size?'|g'+bits(g.grown):'')+'|'+g.creatures.map(c=>!c.alive?'x':
+  const inkS=g.inkLeft||(g.ink&&Object.keys(g.ink).length)?'i'+(g.inkLeft||0)+(g.inkLeft&&g.newest?'n'+IDX[g.newest]:'')+Object.keys(g.ink||{}).map(k=>IDX[k]+':'+g.ink[k]).join('.'):'';
+  return g.phase[0]+inkS+(g.startKey&&g.START.length>1?'s'+IDX[g.startKey]:'')+(g.liftPending?'L'+(g.lifted?IDX[g.lifted]:''):'')+bits(g.fingers)+'|'+bits(g.revealed)+(g.grown&&g.grown.size?'|g'+bits(g.grown):'')+'|'+g.creatures.map(c=>!c.alive?'x':
     IDX[c.pos]+(c.mover==='path'?':'+c.i:c.mover==='dir'?':'+c.dir:'')+(c.acc?'a'+c.acc:'')+(c.seen?'s':'')+(c.awake?'w':'')).join(',');
 }
 
 return {ROWY,KEYS,KEYMAP,IDX,NEI,DIRS,OPP,L,adjacent,PRESETS,TYPES,TARGETS,MOVERS,HEADINGS,TERRAINS,LIFTS,clone,slug,expandPath,normalizeLevel,resolveLevel,ecologyOf,
   levelsSource,tankWater,shiftKey,shiftLevel,rowOffset,latticeOffset,createGame,cloneGame,isRock,passable,grip,distMap,targetKeys,moveOnce,stepAll,stepCreature,hidden,canEat,isVisible,lane,reveal,
-  intents,territory,unfilled,fillable,tally,creatureKeys,territoryEnd,solvePar,start,kill,liftBlock,pickup,placeBlock,place,legalPlacements,stateKey};
+  intents,tickInk,body,footprint,bloomNow,inked,INK_TURNS,inkBlock,squirt,territory,unfilled,fillable,tally,creatureKeys,territoryEnd,solvePar,start,kill,liftBlock,pickup,placeBlock,place,legalPlacements,stateKey};
 });
