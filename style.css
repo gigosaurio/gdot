@@ -246,3 +246,5 @@ body.edit .cr{opacity:.92}
 .coach .ci.ink{color:var(--ink)} .coach .ci.snake,.coach .ci.ray{color:var(--danger)} .coach .ci.jelly{color:#8a4fb8} .coach .ci.turtle{color:#3f7a3a}
 .legend i svg{shape-rendering:crispEdges}
 @media (prefers-reduced-motion:reduce){.cr{transition:none} .cr i svg{animation:none} .bubble{display:none} .k.t-algae svg{animation:none}}
+.k.aimed.blind::before{border-style:dotted}
+.k .mark.bq{right:1px;top:1px;width:34%;height:34%;color:var(--danger)}
