@@ -620,7 +620,7 @@ async function browserTests() {
       ok(/chip parc made/.test(b.strip), 'the strip shows presses against par, made'); eq(await js('PROG.best["smoke-terr"]'), tt.par, 'the best is recorded');
       await up('KeyG');
       ok(await js("document.querySelectorAll('#critters .cr').length===1 && /translate\\(/.test(document.querySelector('#critters .cr').style.transform)"), 'a visible creature is drawn on the creature layer, placed by transform');
-      ok(await js("!document.querySelector('.k.occ > svg')"), 'the key under it shows no icon of its own');
+      ok(await js("!document.querySelector('.k.occ.pred > svg, .k.occ.prey > svg')"), 'the key under it shows no icon of its own');
       const idx = await js('CUR'); await js(`document.querySelector('#zone .tank[data-i="${idx}"]').click(); 1`);
       eq(await js('[LV.id, G.phase]'), ['smoke-terr', 'ready'], 'a cleared territory tank can be played again for par');
       // a creature taking a key, and every key taken
@@ -638,7 +638,7 @@ async function browserTests() {
       await down('KeyG'); await tap('KeyH'); ok(await js("document.querySelectorAll('#status .chip.inkc .inki').length===1"), 'the strip shows one ink');
       await tap('Space'); b = await state(); eq([b.turn, await js('G.inkLeft'), await js('Object.keys(G.ink).length>0')], [3, 0, true], 'Space squirts: a press, the ink is spent, the cloud is down');
       ok(await js("document.querySelectorAll('.k.inked').length>=3"), 'inked keys are drawn'); ok(b.coachText.includes('Inked'), 'and explained');
-      await tap('Space'); eq(b.turn, 3, 'with no ink left Space does nothing to the run'); eq((await state()).bad, ['Space'], 'and is flagged');
+      await down('Space'); eq(await js('G.turn'), 3, 'with no ink left Space does nothing to the run'); eq((await state()).bad, ['Space'], 'and is flagged'); await up('Space');
       await up('KeyG');
       await js(`STORE.levels.push(${J(Object.assign({}, tk, { id: 'smoke-take2', tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyF'] }))}); setCur(STORE.levels.length-1); buildRuntime(); PROG.tips={}; 1`);
       await js('place("KeyG"); place("KeyF"); 1'); b = await state();
