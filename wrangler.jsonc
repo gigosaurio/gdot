@@ -19,7 +19,7 @@
   "workers_dev": false,
   "routes": [{ "pattern": "g.gigomakes.com", "custom_domain": true }],
   "d1_databases": [
-    { "binding": "TELEMETRY", "database_name": "gdot-telemetry", "database_id": "REPLACE_WITH_ID_FROM_wrangler_d1_create" }
+    { "binding": "TELEMETRY", "database_name": "gdot-telemetry", "database_id": "652be944-c449-4ab7-b8ec-ca8c11a7d14a" }
   ],
   "assets": { "directory": ".", "binding": "ASSETS", "html_handling": "auto-trailing-slash", "not_found_handling": "none" }
 }
