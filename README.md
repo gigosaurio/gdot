@@ -17,7 +17,9 @@ Runs straight from disk: open `play.html` in a browser. No build step.
 
 Each zone plays by one of two rule sets (`zone.rules`, or `level.rules` on one tank):
 
-**Territory** (2026-09-28, the Hatchery and the Shallows first). Fill every open key of the tank in as
+**Territory** (2026-09-28: the Hatchery and the Shallows; the Shallows tanks are Pacing, Round trip, Slow
+crab, Urchin, Fish supper, Two sharks, Sleeping eel and Growth, found by a search over closed tanks and
+picked for a ramp: the gap between par and a greedy arrow-reading player grows from about 1 to 4 presses). Fill every open key of the tank in as
 few presses as you can. Creatures show where they go next: an arrow on each, and a dashed border on the
 key it will take. A creature that lands on one of your tentacles takes that key (the tentacle is gone; the
 key is free again once it leaves); nothing kills you outright, and the tank is only lost when every
@@ -63,9 +65,9 @@ whatever tank you pick, retries it when you die, and never touches progress. **r
 forgets every tank (in every open tab) and goes back to the intro.
 
 Tutorial: a zone marked `tutorial`, the **Hatchery**, comes before everything for a new player:
-five small tanks on L 9 P 0 / (Touch: press, hold, the tray; Spines: algae, fog, a creature bites
-what is on its key; Beat: one press, one move, creatures move first; Wait: lift and put back; Starfish:
-a full tray is not enough). Every creature is seen, and seen moving, before it can bite. Its
+five small territory tanks on L 9 P 0 / (Fill: press, hold, fill every key; Taken: arrows, a creature
+takes a key and it is free again once it leaves; Wait: lift and put back; Its own: a creature's key
+counts as its own; Starfish: growing the tank, and par). Every creature is seen, and seen moving, before it can bite. Its
 tanks come up in order, a death retries the same tank, and every tank has coach lines. It is not
 part of the campaign: the footer button skips it (and later plays it again), clearing or skipping it
 means it never comes back on its own, and finishing the game does not need it. A returning player
