@@ -13,7 +13,8 @@
   const ENDPOINT = '/api/telemetry/ingest';
   const MAX_QUEUE = 20;          // flush at this many events
   const FLUSH_MS = 60000;        // ...or this often (the worker takes 60 uploads per hour per player)
-  const BUILD = '2026-09-27-tutorial'; // second friends test: the Hatchery tutorial, coach line and tips, no-holding option
+  const BUILD = '2026-09-28-alive'; // territory rules everywhere, new creatures, ink, animated creature layer
+  // (earlier rounds: '2026-09-27-tutorial' the Hatchery tutorial and tips; '2026-09-26-friends' the first 40 classic tanks)
   // (first round: '2026-09-26-friends', 40 tanks in 5 zones, intro, icon-only feedback)
 
   const state = { consent: null, id: null };

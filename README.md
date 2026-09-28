@@ -19,7 +19,15 @@ Each zone plays by one of two rule sets (`zone.rules`, or `level.rules` on one t
 
 **Territory** (2026-09-28: the Hatchery and the Shallows; the Shallows tanks are Pacing, Round trip, Slow
 crab, Urchin, Fish supper, Two sharks, Sleeping eel and Growth, found by a search over closed tanks and
-picked for a ramp: the gap between par and a greedy arrow-reading player grows from about 1 to 4 presses). Fill every open key of the tank in as
+picked for a ramp: the gap between par and a greedy arrow-reading player grows from about 1 to 4 presses).
+
+Then the four zones after it, all territory rules with the new creatures and ink, found the same way: the
+**Rock garden** (rays, turtles and rocks: Glider, Slow lane, Crossfire, Dart, Two speeds, Bloom, Boulders,
+Starlight), the **Currents** (where ink is introduced: First ink, Ink and dart, Cloud cover, Two squirts, Snake
+charmer, Manta pair, Coil and fin, Tidal star), the **Caves** (eels, jellyfish and snakes in the dark: Hunter,
+Pulse, Coils, Hunted, Slow supper, Two dens, Blackout, Deep star) and **The rim** (the wide keys and the F-row:
+Edge, Lock, Big tank, Corner den, Escape, Enter, F-row, and the finale Alt+F4). Hunter and Alt+F4 are the two
+tanks a careless player loses often; the rest a greedy player clears, above par. Fill every open key of the tank in as
 few presses as you can. Creatures show where they go next: an arrow on each, and a dashed border on the
 key it will take. A creature that lands on one of your tentacles takes that key (the tentacle is gone; the
 key is free again once it leaves); nothing kills you outright, and the tank is only lost when every
@@ -137,7 +145,7 @@ npx wrangler versions upload -c wrangler.gdot.jsonc     # a private preview URL 
 npx wrangler deploy -c wrangler.gdot.jsonc              # g.gigomakes.com (the custom domain is added on first deploy)
 ```
 
-Telemetry is opt-in (the footer asks once). The build is tagged `2026-09-27-tutorial` (the first round was `2026-09-26-friends`) in
+Telemetry is opt-in (the footer asks once). The build is tagged `2026-09-28-alive` (earlier rounds: `2026-09-27-tutorial`, `2026-09-26-friends`) in
 `telemetry.js`; change it for each test round so rounds can be told apart. Uploads batch every
 60 seconds because the worker accepts about 60 per hour per player.
 

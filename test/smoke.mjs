@@ -176,7 +176,7 @@ function engineTests() {
     if (!s.solved && played.rules !== 'territory') s = solve(played, { budget: 60000, pickups: true });
     if (played.rules === 'territory' && s.solved) eq(s.par, level.par, `${level.name}: par in levels.js matches the solver`);
     ok(s.solved, `${level.name}: solver finds a clear`);
-    if (s.solved) { const r = GDOT.createGame(played); for (const m of s.moves) { if (m.pickup) GDOT.pickup(r, m.pickup); GDOT.place(r, m.place); } eq(r.phase, 'won', `${level.name}: the line replays to a clear`); }
+    if (s.solved) { const r = GDOT.createGame(played); for (const m of s.moves) { if (m.ink) { GDOT.squirt(r); continue; } if (m.pickup) GDOT.pickup(r, m.pickup); GDOT.place(r, m.place); } eq(r.phase, 'won', `${level.name}: the line replays to a clear`); }
   }
 }
 
@@ -862,10 +862,10 @@ async function browserTests() {
         ok(!!line, `${l.name}: the solver clears it`); if (!line) continue;
         eq(line.length, l.par, `${l.name}: par in levels.js is the solver's (${line.length})`);
         await js(`setCur(levelIndex(${JSON.stringify(l.id)})); buildRuntime(); 1`);
-        const inT = new Set(lvl.tank || []); const hold = ['KeyQ', 'KeyP', 'KeyZ', 'KeyT', 'KeyG', 'KeyA'].find(k => !inT.has(k) && !line.some(m => m.place === k || m.pickup === k));
+        const inT = new Set(lvl.tank || []); const hold = ['KeyQ', 'KeyP', 'KeyZ', 'KeyT', 'KeyG', 'KeyA', 'KeyM', 'KeyX'].find(k => !inT.has(k) && !line.some(m => m.place === k || m.pickup === k));
         await down(hold); // an anchor finger that is not in the way, as a player keeps one key down
-        for (const m of line) { if (m.pickup) await tap(m.pickup); await tap(m.place); }
-        const ph = await js('G.phase'); eq(ph, 'won', `${l.name}: its par line clears it with real presses`); await up(hold);
+        for (const m of line) { if (m.ink) { await tap('Space'); continue; } if (m.pickup) await tap(m.pickup); await tap(m.place); }
+        const ph = await js('G.phase'); eq(ph, 'won', `${l.name}: its par line clears it with real presses${line.some(m => m.ink) ? ' (ink included)' : ''}`); await up(hold);
       }
     }
     eq(errors, [], 'no page exceptions');
