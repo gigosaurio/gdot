@@ -317,6 +317,7 @@ function place(g,code){
   g.fingers.add(code); g.liftPending=false; g.lifted=null; g.newest=code;
   // 2. reveal around the new tentacle
   reveal(g,code,1);
+  if(g.MODE==='territory'&&g.turn===1){ for(const k of territory(g)){ g.revealed.add(k); for(const n of NEI[k]) g.revealed.add(n); } } // territory: the first press shows the whole tank (caves still hide what lives in them)
   // 3. discover creatures on revealed water (cave dwellers stay hidden inside caves)
   const newly=[]; for(const c of g.creatures) if(c.alive&&!c.seen&&g.revealed.has(c.pos)&&g.TER[c.pos]!=='cave'){c.seen=true;newly.push(c);}
   // 3b. sleepers wake when a tentacle touches their key or a neighbour

@@ -34,7 +34,9 @@ key is free again once it leaves); nothing kills you outright, and the tank is o
 tentacle is taken, which plays it again. You can only grab keys next to one of your tentacles (putting back
 the one you just lifted is always fine). Lifting is free; lift and put back is a one-press wait. A starfish,
 once held, turns the algae around it into water: more to fill. The tank is clear when every key of the
-territory (grip keys joined to the start; urchins are walls) is yours or has a creature on it. Par is the
+territory (grip keys joined to the start; urchins are walls) is yours or has a creature on it. Since
+2026-09-28 the first press shows the whole tank at once (creatures inside caves stay hidden and sleepers
+still wake on touch), so the puzzle is played with the board in view: fog only matters in classic tanks. Par is the
 fewest presses (`GDOT.solvePar`, an exact search; `par` is stored on each tank by tools/campaign.mjs or the
 studio's Find par). The header shows par and your best; a cleared tank can be clicked in the zone strip to
 play it again for par.

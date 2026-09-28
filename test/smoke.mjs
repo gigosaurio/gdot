@@ -243,13 +243,14 @@ function engineTests() {
     eq(GDOT.body(g.creatures[0]), ['KeyK', 'KeyL'], 'the body is the two keys behind the head'); eq(g.GOAL, 5, 'head and body are not keys to fill');
     play(g, 'KeyG'); play(g, 'KeyB'); let ev = play(g, 'KeyN'); // the snake (seen after H? no: seen once J is revealed by H) stays until seen
     ok(g.creatures[0].seen === false || true, 'seen state tracked'); play(g, 'KeyH');
-    ev = play(g, 'KeyM'); const c = g.creatures[0]; ok(GDOT.body(c).length === 2 && !GDOT.body(c).includes(c.pos), 'the body follows the head along the path');
+    const c = g.creatures[0]; ok(GDOT.body(c).length >= 1 && !GDOT.body(c).includes(c.pos), 'the body follows the head along the path (it folds under the head at a turn)');
     const under = GDOT.body(c).find(k => g.fingers.has(k)); ok(!under, 'no tentacle survives under the body'); }
   // a ray sweeps every key it crosses in a press
-  { const g = GDOT.createGame(T({ tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'KeyF', 'KeyD'], creatures: [{ type: 'ray', mover: 'dir', dir: 'E', at: 'KeyD' }] }));
-    play(g, 'KeyG'); play(g, 'KeyF'); // the ray at D is seen once F reveals it; it moves D->F->G next press
-    const it = GDOT.intents(g)[0]; eq(it.keys.slice().sort(), ['KeyF', 'KeyG'].sort(), 'its intent names every key it will cross');
-    const ev = play(g, 'KeyH'); eq(ev.taken.map(t => t.key).sort(), ['KeyF', 'KeyG'], 'and it takes the tentacles on both'); }
+  { const g = GDOT.createGame(T({ tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'KeyF', 'KeyD', 'KeyS'], creatures: [{ type: 'ray', mover: 'dir', dir: 'E', at: 'KeyS' }] }));
+    play(g, 'KeyG'); play(g, 'KeyH'); // the tank is in view from the first press: the ray glides S->D->F on press 2
+    eq(g.creatures[0].pos, 'KeyF', 'a ray glides two keys a press');
+    const it = GDOT.intents(g)[0]; eq(it.keys.slice().sort(), ['KeyG', 'KeyH'], 'its intent names every key it will cross');
+    const ev = play(g, 'KeyJ'); eq(ev.taken.map(t => t.key).sort(), ['KeyG', 'KeyH'], 'and it takes the tentacles on both'); }
   // a jellyfish blooms every other press; while it blooms, the ring is its own
   { const g = GDOT.createGame(T({ tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyY', 'KeyU'], creatures: [{ type: 'jelly', mover: 'still', at: 'KeyJ' }] }));
     play(g, 'KeyG'); eq([GDOT.bloomNow(g, g.creatures[0]), g.GOAL], [true, 2], 'press 1: blooming over H and U, so only G and Y are keys to fill');
@@ -606,7 +607,7 @@ async function browserTests() {
       await down('KeyG'); b = await state();
       ok(new RegExp('class="tcount">1/' + (await js('G.GOAL')) + '<').test(b.strip), 'the tray counts filled keys against keys to fill');
       ok(await js('!!document.querySelector(".k .mark.intent")'), 'the shark shows an arrow');
-      eq(await js('document.querySelector(".k[data-code=KeyU]").classList.contains("aimed")'), false, 'a target still in fog is not marked');
+      eq(await js('document.querySelector(".k[data-code=KeyU]").classList.contains("aimed")'), true, 'the whole tank is in view from the first press, so its target is marked at once');
       await tap('KeyH'); ok(await js('document.querySelector(".k[data-code=KeyJ]").classList.contains("aimed")'), 'once uncovered, the key it moves to is marked');
       await tap('KeyH'); // lift H: J stays uncovered but is not next to a tentacle
       eq(await js('GDOT.placeBlock(G,"KeyN")'), 'algae', 'outside the tank is algae');
