@@ -679,6 +679,7 @@ function render(){
   const occ={}; for(const c of (pv?pv.creatures:creatures)){ if(c.alive&&(debug||GDOT.isVisible(G,c))) occ[c.pos]=c; }
   const lane=new Set(), badge={};
   if(debug) for(const c of creatures){ if(c.alive) for(const p of GDOT.lane(G,c)) lane.add(p); }
+  if(!debug&&G.MODE==='territory') for(const c of creatures){ if(c.alive&&c.seen&&c.awake) for(const p of GDOT.lane(G,c)) lane.add(p); } // territory: every fixed route is shown in full (chasers have none)
   let selPos=null;
   if(edit&&E.sel!=null){ const lc=LV.creatures[E.sel]; if(lc){ selPos=lc.mover==='path'?(lc.path||[])[0]:lc.at; if(lc.mover==='path') (lc.path||[]).forEach((p,i)=>{badge[p]=(badge[p]?badge[p]+',':'')+(i+1);}); } }
   const INT=new Map(), aim=new Set(), blind=new Set(); // aim: every key a creature will cover after your next press; blind: from somewhere you cannot see
