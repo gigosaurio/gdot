@@ -248,3 +248,22 @@ body.edit .cr{opacity:.92}
 @media (prefers-reduced-motion:reduce){.cr{transition:none} .cr i svg{animation:none} .bubble{display:none} .k.t-algae svg{animation:none}}
 .k.aimed.blind::before{border-style:dotted}
 .k .mark.bq{right:1px;top:1px;width:34%;height:34%;color:var(--danger)}
+/* ---- terrain tiles: each terrain is a tinted tile, tinted again by the zone's look ---- */
+:root{--bg-algae:#b9d0b0;--fg-algae:#2f6b3a;--bg-rock:#6b7278;--fg-rock:#cfd5d8;--bg-reef:#efc3a8;--fg-reef:#b1471c;--bg-cave:#3b4448;--fg-cave:#0d1215}
+body[data-env=sand]{--bg-algae:#c4d3a8;--bg-rock:#7a7368;--bg-reef:#f0c9a2;--bg-cave:#4a423a}
+body[data-env=kelp]{--bg-algae:#a9c9a4;--fg-algae:#245a30;--bg-rock:#6d7a6f;--bg-cave:#33403a}
+body[data-env=stone]{--bg-algae:#b7c8b4;--bg-rock:#5f676c;--bg-reef:#e8bda6;--bg-cave:#343b3f}
+body[data-env=blue]{--bg-algae:#aecbc2;--fg-algae:#2b6a5a;--bg-rock:#65727e;--bg-reef:#ebc0a9;--bg-cave:#2f3a47}
+body[data-env=dark]{--bg-algae:#93a894;--fg-algae:#1f4a2a;--bg-rock:#4f575c;--bg-reef:#d9ad95;--bg-cave:#1e2427;--fg-cave:#000}
+body[data-env=deep]{--bg-algae:#8fa6a3;--fg-algae:#1c4a45;--bg-rock:#4a5560;--bg-reef:#d3a99a;--bg-cave:#1b2229;--fg-cave:#000}
+.k.t-algae{background:var(--bg-algae);color:var(--fg-algae);border-color:#e6efe0 #6f8a66 #6f8a66 #e6efe0}
+.k.t-rock{background:var(--bg-rock);color:var(--fg-rock);border-color:#9aa2a7 #3a4044 #3a4044 #9aa2a7}
+.k.t-reef{background:var(--bg-reef);color:var(--fg-reef);border-color:#fbe4d3 #b8785a #b8785a #fbe4d3}
+.k.t-cave{background:var(--bg-cave);color:var(--fg-cave);border-color:#7c868c #14191c #14191c #7c868c}
+.k.t-cave .sub,.k.t-rock .sub{color:#d8dde0} .k.t-reef .sub{color:#6b3a22} .k.t-algae .sub{color:#2f4f33}
+.k.t-algae svg,.k.t-rock svg,.k.t-reef svg,.k.t-cave svg{width:78%;height:78%}
+.k.t-rock svg{width:100%;height:100%;position:absolute;inset:0}
+.k.t-cave.held,.k.t-reef.held{color:var(--held)} .k.t-cave.held{background:#5a6570} .k.t-reef.held{background:#f6d8c4}
+.k.t-cave.held svg,.k.t-reef.held svg{width:62%;height:62%}
+.k.held.t-reef{box-shadow:inset 0 0 0 3px var(--fg-reef)} .k.held.t-cave{box-shadow:inset 0 0 0 3px #9aa6b0}
+.k.t-cave.occ,.k.t-reef.occ,.k.t-algae.occ,.k.t-rock.occ{}
