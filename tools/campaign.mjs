@@ -33,12 +33,12 @@ export function expand(spec) {
   if (spec.lift && spec.lift !== 'any') level.lift = spec.lift;
   if (spec.ecology) level.ecology = spec.ecology;
   if (spec.coach) level.coach = spec.coach; // tutorial lines, see gdot.js (coach)
-  if (spec.closed) { // a closed tank: only these keys are the tank (territory tanks; a starfish opens the algae around it)
-    const t = new Set(water); for (const k of codes(spec.rock)) t.add(k); level.tank = [...t];
-  }
   const water = new Set(codes(spec.water)); for (const s of level.start) water.add(s);
   for (const t of ['reef', 'cave']) for (const k of codes(spec[t])) { level.terrain[k] = t; water.add(k); }
   for (const t of ['rock', 'algae']) for (const k of codes(spec[t])) { level.terrain[k] = t; water.delete(k); }
+  if (spec.closed) { // a closed tank: only these keys are the tank (territory tanks; a starfish opens the algae around it)
+    const t = new Set(water); for (const k of level.start) t.add(k); for (const k of codes(spec.rock)) t.add(k); level.tank = [...t];
+  }
   for (const c of spec.creatures || []) {
     const p = GDOT.PRESETS[c.type] || {};
     const cr = { type: c.type, mover: c.mover || (c.path ? 'path' : p.mover || 'dir'), dir: c.dir || p.dir || 'E', speed: c.speed ?? p.speed ?? 1, size: c.size || p.size || 'big', prey: c.prey ?? !!p.prey, cave: c.cave ?? !!p.cave, wake: c.wake ?? !!p.wake };
@@ -202,6 +202,7 @@ export function buildLevel(entry, opts = {}) {
   if (slot) { recipe.start = { keys: [slot.key] }; if (slot.zone.region) recipe.region = slot.zone.region; }
   const res = generate(recipe, { seed: entry.seed, count: 1, tries: entry.tries, rollouts: opts.rollouts || 600, budget: opts.budget || 60000, progress: !!opts.progress });
   if (!res.levels.length) return { level: null, analysis: null, rejected: res.rejected, attempts: res.attempts };
+  if (slot && slot.zone.rules === 'territory') { const l = res.levels[0].level; l.tank = [...GDOT.tankWater(l)]; const r = GDOT.solvePar(GDOT.resolveLevel(l, { rules: 'territory' }), { budget: opts.parBudget || 600000 }); if (r.solved) l.par = r.par; }
   return res.levels[0];
 }
 export function parseOnly(s) {
@@ -280,7 +281,7 @@ function cli() {
     const fileZones = fs.existsSync(LEVELS_JS) ? loadZones() : [];
     const owned = new Set(out.map(l => l.id)), campaignNames = new Set(CAMPAIGN.map(e => GDOT.slug(e.name)));
     const extra = [...byId.values()].filter(l => !owned.has(l.id) && !campaignNames.has(l.id));
-    const zonesOut = zoneMeta().map(z => { const f = fileZones.find(q => q.id === z.id); return f ? { ...f, keys: z.keys } : z; });
+    const zonesOut = zoneMeta().map(z => { const f = fileZones.find(q => q.id === z.id); if (!f) return z; const o = { ...f, keys: z.keys }; if (z.rules) o.rules = z.rules; else delete o.rules; if (z.tutorial) o.tutorial = true; return o; });
     for (const f of fileZones) if (!zonesOut.some(z => z.id === f.id)) zonesOut.push(f);
     if (extra.length) console.error(`kept ${extra.length} tank(s) the campaign does not own: ${extra.map(l => l.name).join(', ')}`);
     fs.writeFileSync(LEVELS_JS, GDOT.levelsSource(zonesOut, out.concat(extra)));

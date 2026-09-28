@@ -125,7 +125,13 @@ function createGame(level){
     TER,START:(LV.start||[]).filter(k=>KEYMAP[k]),REQ:(LV.required||[]).filter(k=>KEYMAP[k]),GOAL:max?Math.min(LV.goal||8,max):(LV.goal||8),
     MAX:max,LIFT:LIFTS.includes(LV.lift)?LV.lift:'any',liftPending:false,lifted:null,creatures:[],last:null,
     MODE:LV.rules==='territory'?'territory':'classic',grown:new Set()};
-  if(g.MODE==='territory') g.MAX=0; // fill everything: no cap
+  if(g.MODE==='territory'){ g.MAX=0; // fill everything: no cap
+    if(!Array.isArray(LV.tank)){ // an open tank: close it around the water joined to its start keys (and its own rock, reef, cave)
+      const inside=new Set(), q=[...g.START];
+      while(q.length){ const k=q.pop(); if(inside.has(k)||!KEYMAP[k]) continue; const t=g.TER[k]; if((t==='algae'||t==='rock')&&!g.START.includes(k)) continue; inside.add(k); for(const n of NEI[k]) q.push(n); }
+      g.TER=Object.assign({},g.TER); for(const k of KEYS) if(!inside.has(k.code)&&!g.TER[k.code]) g.TER[k.code]='algae';
+    }
+  }
   g.creatures=(LV.creatures||[]).map((c,n)=>{
     const eco=ecologyOf(c,LV);
     const r={id:n,type:c.type,label:(PRESETS[c.type]||{}).label||c.type,size:c.size||'big',mover:c.mover||'dir',dir:c.dir||'E',speed:c.speed==null?1:Number(c.speed),
@@ -145,8 +151,9 @@ function cloneGame(g){ return Object.assign({},g,{fingers:new Set(g.fingers),rev
 // creature never moves (an urchin) is a wall. Grows when a starfish opens algae, or when that creature is eaten.
 function territory(g){
   const wall=new Set(); for(const c of g.creatures) if(c.alive&&!c.prey&&(c.mover==='still'||c.speed<=0)) wall.add(c.pos);
-  const seen=new Set(), q=[...g.START];
-  while(q.length){ const k=q.pop(); if(seen.has(k)||!grip(g,k)||wall.has(k)) continue; seen.add(k); for(const n of NEI[k]) if(!seen.has(n)) q.push(n); }
+  const seeds=g.startKey?[g.startKey]:g.START, seed=new Set(seeds); // after the first press: only the pool you started in
+  const seen=new Set(), q=[...seeds];
+  while(q.length){ const k=q.pop(); if(seen.has(k)||(!grip(g,k)&&!seed.has(k))||wall.has(k)) continue; seen.add(k); for(const n of NEI[k]) if(!seen.has(n)) q.push(n); }
   return seen;
 }
 // A creature's key is its tile: the tank is clear when every key of the territory is yours or has a creature on it.
@@ -283,7 +290,7 @@ function place(g,code){
   const why0=placeBlock(g,code);
   if(why0==='held') return {type:'noop',code};
   if(why0) return {type:'refused',reason:why0,code};
-  g.phase='play'; g.turn++;
+  g.phase='play'; g.turn++; if(!g.startKey) g.startKey=code; // the start key this run began on
   for(const c of g.creatures){ c.prev=c.pos; c.vis0=isVisible(g,c); }
   // 1. everything already seen and awake takes its steps (reacting to the board before the new tentacle lands);
   //    creatures that meet may eat each other
@@ -325,9 +332,9 @@ function place(g,code){
 // Event: {type:'placed'|'won'|'dead', taken:[{key,by,from,landed}], ate, grew, left, ...}
 function territoryEnd(g,code,ev){
   const taken=[], ate=[];
+  for(const c of g.creatures) if(c.alive&&c.prey&&g.fingers.has(c.pos)){ c.alive=false; ate.push(c); reveal(g,c.pos,2); }
   for(const c of g.creatures){
-    if(!c.alive||!g.fingers.has(c.pos)) continue;
-    if(c.prey){ c.alive=false; ate.push(c); reveal(g,c.pos,2); continue; }
+    if(!c.alive||c.prey||!g.fingers.has(c.pos)) continue;
     if(hidden(g,c,c.pos)) continue;
     const r=c.route||[c.prev], from=r.length>1?r[r.length-2]:c.prev;
     g.fingers.delete(c.pos); taken.push({key:c.pos,by:c,from,landed:c.pos===code});
@@ -360,23 +367,27 @@ function solvePar(level,opts){
     if(g.LIFT!=='none') for(const f of g.fingers){ const h=cloneGame(g); if(!pickup(h,f)) continue; for(const k of legalPlacements(h)) out.push({pickup:f,place:k}); }
     return out; };
   const heap=[], push=n=>{ heap.push(n); let i=heap.length-1; while(i){ const p=(i-1)>>1; if(less(heap[p],heap[i])) break; [heap[p],heap[i]]=[heap[i],heap[p]]; i=p; } };
-  const less=(a,b)=>a.f<b.f||(a.f===b.f&&a.g.turn>b.g.turn);
+  const less=(a,b)=>a.f<b.f||(a.f===b.f&&a.turn>b.turn);
   const pop=()=>{ const top=heap[0], last=heap.pop(); if(heap.length){ heap[0]=last; let i=0; for(;;){ const l=2*i+1, r=l+1; let m=i; if(l<heap.length&&less(heap[l],heap[m])) m=l; if(r<heap.length&&less(heap[r],heap[m])) m=r; if(m===i) break; [heap[m],heap[i]]=[heap[i],heap[m]]; i=m; } } return top; };
   // Lower bound: territory size - tentacles - creatures that can hold a key. Only a press (+1 tentacle) lowers it, by one at most:
   // growth and meals only raise it, and at a clear every key is a tentacle or a creature's. So par stays exact.
   const movers=g=>{ let m=0; for(const c of g.creatures) if(c.alive&&!c.prey&&c.mover!=='still'&&c.speed>0) m++; return m; };
   const est=g=>Math.max(0,g.tsize-g.fingers.size-movers(g),Math.ceil(g.left/(1+movers(g))));
+  const deadline=opts&&opts.ms?Date.now()+opts.ms:0;
+  const pathOf=n=>{ const p=[]; for(let x=n;x&&x.parent;x=x.parent) p.unshift(x.act); return p; };
+  const rebuild=n=>{ const g=createGame(level); for(const a of pathOf(n)){ if(a.pickup) pickup(g,a.pickup); place(g,a.place); } return g; }; // nodes stay small: no game copies kept
   const best=new Map(); let nodes=0;
-  push({g:g0,f:est(g0),parent:null,act:null}); best.set(stateKey(g0),0);
+  push({f:est(g0),turn:0,won:false,parent:null,act:null}); best.set(stateKey(g0),0);
   while(heap.length){
     const n=pop();
-    if(n.g.phase==='won'){ const path=[]; for(let x=n;x.parent;x=x.parent) path.unshift(x.act); return {solved:true,par:n.g.turn,moves:path,nodes,exhausted:false}; }
-    if(++nodes>budget) return {solved:false,par:null,moves:null,nodes,exhausted:true};
-    for(const a of moves(n.g)){
-      const h=cloneGame(n.g); if(a.pickup&&!pickup(h,a.pickup)) continue;
+    if(n.won) return {solved:true,par:n.turn,moves:pathOf(n),nodes,exhausted:false};
+    if(++nodes>budget||(deadline&&!(nodes&63)&&Date.now()>deadline)) return {solved:false,par:null,moves:null,nodes,exhausted:true};
+    const g=rebuild(n);
+    for(const a of moves(g)){
+      const h=cloneGame(g); if(a.pickup&&!pickup(h,a.pickup)) continue;
       const ev=place(h,a.place); if(ev.type==='refused'||ev.type==='noop'||ev.type==='dead') continue;
       const k=stateKey(h); if(best.has(k)&&best.get(k)<=h.turn) continue; best.set(k,h.turn);
-      push({g:h,f:h.turn+(h.phase==='won'?0:est(h)),parent:n,act:a});
+      push({f:h.turn+(h.phase==='won'?0:est(h)),turn:h.turn,won:h.phase==='won',parent:n,act:a});
     }
   }
   return {solved:false,par:null,moves:null,nodes,exhausted:false};
@@ -464,7 +475,7 @@ function legalPlacements(g){
 function bits(set){ let a=0,b=0,c=0; for(const k of set){ const i=IDX[k]; if(i<30) a|=1<<i; else if(i<60) b|=1<<(i-30); else c|=1<<(i-60); } return a.toString(36)+'.'+b.toString(36)+'.'+c.toString(36); }
 // Canonical key of the whole game state (fingers, fog, every creature) for search memo tables.
 function stateKey(g){
-  return g.phase[0]+(g.liftPending?'L'+(g.lifted?IDX[g.lifted]:''):'')+bits(g.fingers)+'|'+bits(g.revealed)+(g.grown&&g.grown.size?'|g'+bits(g.grown):'')+'|'+g.creatures.map(c=>!c.alive?'x':
+  return g.phase[0]+(g.startKey&&g.START.length>1?'s'+IDX[g.startKey]:'')+(g.liftPending?'L'+(g.lifted?IDX[g.lifted]:''):'')+bits(g.fingers)+'|'+bits(g.revealed)+(g.grown&&g.grown.size?'|g'+bits(g.grown):'')+'|'+g.creatures.map(c=>!c.alive?'x':
     IDX[c.pos]+(c.mover==='path'?':'+c.i:c.mover==='dir'?':'+c.dir:'')+(c.acc?'a'+c.acc:'')+(c.seen?'s':'')+(c.awake?'w':'')).join(',');
 }
 

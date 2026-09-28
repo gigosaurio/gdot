@@ -247,6 +247,7 @@ function place(code){
   if(G.turn>1) tipsDone(); // tips stay up until the next tentacle goes down (the first one of a run keeps the ready tips)
   CUE={meals:ev.meals||[],ate:(ev.ate||[]).map(c=>c.pos),woke:(ev.woke||[]).map(c=>c.pos),spot:(ev.newly||[]).map(c=>c.pos)};
   audio.tick(); (ev.stepped||[]).forEach(c=>{ if(c.alive) audio.step(c); }); (ev.meals||[]).forEach(m=>audio.crunch(m.key));
+  if(ev.type==='dead'&&ev.taken&&ev.taken.length>1) CUE.taken=ev.taken.map(t=>t.key).filter(k=>k!==ev.key);
   if(ev.type==='dead'){ T('death',{turn:G.turn,tentacles:G.fingers.size,by:ev.by.type,key:ev.key,kind:ev.kind}); return die(ev); }
   if(ev.ate.length) audio.eat(); if(ev.woke.length) audio.wake();
   if(ev.taken&&ev.taken.length){ CUE.taken=ev.taken.map(t=>t.key); audio.crunch(ev.taken[0].key); tip('taken'); }
@@ -262,12 +263,13 @@ function place(code){
   if(ev.ate.length) parts.push(`Ate the ${ev.ate[0].label.toLowerCase()}.`);
   if(ev.woke.length) parts.push(`Something stirred near ${L(ev.woke[0].pos)}.`);
   if(ev.newly.length) parts.push(`A ${ev.newly[0].label.toLowerCase()}.`);
-  parts.push(G.MODE==='territory'?`${G.fingers.size} of ${G.GOAL} keys filled.`:`${G.fingers.size} of ${G.GOAL} down${G.REQ.length?`, ${ev.reqLeft} marked left`:''}.`);
+  parts.push(G.MODE==='territory'?`${G.GOAL-G.left} of ${G.GOAL} keys filled.`:`${G.fingers.size} of ${G.GOAL} down${G.REQ.length?`, ${ev.reqLeft} marked left`:''}.`);
   say(parts.join(' ')); render();
 }
 function destination(){ // where G+. goes after this run ends
   if(free()) return G.phase==='won'&&STORE.levels[CUR+1]?STORE.levels[CUR+1].id:LV.id;
   if(G.phase==='won') PROG.beaten[LV.id]=1;
+  if(PROG.ret&&(G.phase==='won'||LV.id===PROG.ret)&&beaten(LV)&&LV.id!==PROG.ret){ const r=PROG.ret; delete PROG.ret; if(G.phase==='won'&&levelIndex(r)>=0&&!beaten(STORE.levels[levelIndex(r)])){ PROG.cur=r; saveProgress(); return r; } } // a replay won: back to where you were
   if(G.phase==='won'&&tutorialOn()&&tutTanks().every(beaten)){ PROG.tutorial='done'; T('tutorial',{action:'done'}); }
   if(G.phase==='won'&&!tutorialOn()&&campaignDone()){ saveProgress(); return NEWGAME; }
   if(G.phase==='dead'&&isTerr(LV)){ PROG.cur=LV.id; saveProgress(); return LV.id; } // territory: a lost tank is played again
@@ -291,7 +293,7 @@ function win(){
   audio.win(); T('clear',{turn:G.turn,tentacles:G.fingers.size,par:LV.par||null});
   if(G.MODE==='territory'&&!free()){ const b=PROG.best||(PROG.best={}); if(!b[LV.id]||G.turn<b[LV.id]) b[LV.id]=G.turn; }
   NEXT=destination(); CUE.won=true; $('board').classList.add('won');
-  COACH.tip=[]; coachSet('won'); if(!isTut(zoneOf(LV))) tip('won'); if(G.MODE==='territory'&&LV.par&&G.turn>LV.par) tip('over-par');
+  COACH.tip=[]; coachSet('won'); if(!isTut(zoneOf(LV))) tip('won'); if(G.MODE==='territory'&&LV.par&&G.turn>LV.par&&!zoneDone(zoneOf(LV))) tip('over-par');
   say(`${LV.name} clear in ${G.turn} turns${G.MODE==='territory'&&LV.par?` (par ${LV.par})`:''}. ${NEXT===NEWGAME?'Every tank is clear. G+. starts the game again from the beginning.':NEXT===LV.id?'That was the last tank.':`G+. goes to tank ${tankLabel(STORE.levels[levelIndex(NEXT)])}.`}`); render();
 }
 function startRun(){ GDOT.start(G); T('start',{hold:mustHold()}); if(!free()){ PROG.played[LV.id]=++PROG.tick; saveProgress(); } }
@@ -435,8 +437,8 @@ const TIPS={
   taken:'A creature took that {tentacle}. Its key is free again once it leaves: fill it then.',
   grow:'The {starfish} turned the algae around it into water: more to fill.',
   'dead-overrun':'Every {tentacle} was taken. Keep one out of every creature\'s way.',
-  reach:'{fog} Only keys next to one of your {tentacle}s.',
-  'over-par':'Cleared above par. Click the tank up top later to try for par.',
+  reach:'Only keys next to one of your {tentacle}s.',
+  'over-par':'Cleared above par. While you are in this zone, click the tank up top to try for par again.',
   'dead-leave':'You left the page mid-run, which counts as letting go.',
   'tray-full':'Full tray, but not clear: a {starfish} is still hidden in the fog. Find it and put a {tentacle} on it.',
 };
@@ -451,7 +453,7 @@ const TIPS_T={
   starfish:'{starfish} Starfish: hold it and the algae around it turns into water: more tank to fill.',
   won:'Clear! Every open key was yours. Par is the fewest presses: see it top right.',
 };
-const tipText=id=>(G&&G.MODE==='territory'&&TIPS_T[id])||TIPS[id];
+const tipText=id=>id.startsWith('t-')?TIPS_T[id.slice(2)]:TIPS[id];
 const BYLABEL={}; for(const k of KEYS) if(k.label&&!BYLABEL[k.label]) BYLABEL[k.label]=k.code; BYLABEL.Space='Space';
 // icon tokens, with the word a screen reader says for each (anything else in braces is a key)
 const TOKEN_ICONS={tentacle:'tentacle',starfish:'starfish',lock:'lock',bones:'bones',algae:'algae',rock:'rock',reef:'reef',cave:'cave'};
@@ -468,12 +470,13 @@ function coachSet(m){
 const tipsOn=()=>!STUDIO&&SET.tips!==false&&!(LV&&isTut(zoneOf(LV)));
 // queue a tip; once per player (force: every time, e.g. a death explained in the tutorial)
 function tip(id,force){
-  if(!TIPS[id]) return;
+  if(G&&G.MODE==='territory'&&TIPS_T[id]) id='t-'+id; // the territory wording is a tip of its own
+  if(!tipText(id)) return;
   if(!force&&(!tipsOn()||(PROG.tips||{})[id])) return;
   if(!COACH.tip.includes(id)) COACH.tip.push(id);
 }
 // a placement retires the tips that were on screen; ones queued but not yet drawn stay
-const END_TIP=id=>/^(dead-|sent$|won$|left$)/.test(id); // said on the end screen: seen once shown
+const END_TIP=id=>/^(t-)?(dead-|sent$|won$|left$|over-par$)/.test(id); // said on the end screen: seen once shown
 function markSeen(ids){ if(STUDIO||!ids.length) return; const seen=PROG.tips||(PROG.tips={}); let ch=false; for(const id of ids) if(!seen[id]){ seen[id]=1; ch=true; } if(ch) saveProgress(); }
 function tipsDone(){ markSeen(COACH.shown); COACH.tip=COACH.tip.filter(id=>!COACH.shown.includes(id)); COACH.shown=[]; }
 const realCleared=()=>Object.keys(PROG.beaten||{}).filter(id=>{ const l=STORE.levels.find(x=>x.id===id); return l&&!isTut(zoneOf(l)); }).length;
@@ -620,7 +623,9 @@ on('reset-progress','click',e=>{ e.target.blur(); armed(e.target,'click again to
 window.addEventListener('storage',e=>{ if(e.key!==PROGRESS_KEY||!PROG) return; loadProgress();
   if(!STUDIO&&G&&!inIntro()&&G.phase!=='play'){ const keep=COACH.tip.slice(), i=levelIndex(PROG.cur); CUR=i>=0?i:Math.max(0,levelIndex(pickNext(null))); buildRuntime(); for(const id of keep) if(!COACH.tip.includes(id)) COACH.tip.push(id); render(); } else if(G) render(); });
 on('zone','click',e=>{ const t=e.target.closest('[data-i]'); if(!t) return;
-  if(!free()){ const l=STORE.levels[+t.dataset.i]; if(!l||!beaten(l)||!isTerr(l)||!G||G.phase==='play'||inIntro()) return; } // players: replay a cleared territory tank for par
+  if(!free()){ const l=STORE.levels[+t.dataset.i]; if(!l||!G||G.phase==='play'||inIntro()) return;
+    if(l.id===PROG.ret){ delete PROG.ret; } // back to the tank you left for a replay
+    else { if(!beaten(l)||!isTerr(l)) return; if(!PROG.ret&&LV&&!beaten(LV)) PROG.ret=LV.id; } } // players: replay a cleared territory tank for par
   setCur(+t.dataset.i); buildRuntime(); refreshEditor(); });
 
 /* ================= render ================= */
@@ -710,7 +715,7 @@ const gdotCombo=()=>`<span class="combo">${cap('G','down')}<i class="ico">${ICON
 // "3 down, starfish still open" never reads as a full tray. Only uncovered starfish are shown: how
 // many there are is part of the exploring.
 function tray(){
-  if(G.MODE==='territory'){ const n=G.fingers.size, slots=Math.max(G.GOAL,n);
+  if(G.MODE==='territory'){ const n=Math.max(0,G.GOAL-(G.left||0)), slots=G.GOAL;
     let h='<span class="tray terr">'; for(let i=0;i<slots;i++) h+=`<i class="slot${i<n?' on':''}">${ICON.tentacle}</i>`;
     h+=`<b class="tcount">${n}/${G.GOAL}</b>`;
     const found=G.REQ.filter(k=>G.revealed.has(k)||G.fingers.has(k)||isEdit());
@@ -765,7 +770,7 @@ function renderZone(){
   let h=`<span class="zname">${esc(z.name)}</span><span class="tanks">`;
   // caps in keyboard order (the zone's key list is the order tanks come up in)
   for(const t of zoneTanksShown(z)){
-    const c=['tank']; if(beaten(t.l)) c.push('won'); if(beaten(t.l)&&t.l.par&&(PROG.best||{})[t.l.id]<=t.l.par) c.push('par'); if(!free()&&beaten(t.l)&&isTerr(t.l)) c.push('replay'); if(t.i===CUR) c.push('cur'); if(NEXT&&t.l.id===NEXT&&NEXT!==LV.id) c.push('next'); if(finaleLocked(t.l)) c.push('locked');
+    const c=['tank']; if(beaten(t.l)) c.push('won'); if(beaten(t.l)&&t.l.par&&(PROG.best||{})[t.l.id]<=t.l.par) c.push('par'); if(!free()&&((beaten(t.l)&&isTerr(t.l))||t.l.id===PROG.ret)) c.push('replay'); if(t.l.id===PROG.ret) c.push('ret'); if(t.i===CUR) c.push('cur'); if(NEXT&&t.l.id===NEXT&&NEXT!==LV.id) c.push('next'); if(finaleLocked(t.l)) c.push('locked');
     h+=`<span class="${c.join(' ')}" data-i="${t.i}" title="${free()?esc(t.l.name):''}">${beaten(t.l)?ICON.tentacle:esc(tankLabel(t.l))}</span>`;
   }
   h+='</span><span class="zdots">'+list.map(q=>`<i class="zdot${zoneDone(q)?' done':''}${q.id===z.id?' cur':''}"></i>`).join('')+'</span>';
@@ -806,7 +811,8 @@ function syncStarts(){
   }
   return stranded;
 }
-function edit(fn,merge){ const before=snapshot(); fn(); const stranded=syncStarts(); if(!merge) UNDO.push(before); if(UNDO.length>400) UNDO.shift(); STORE.dirty=true; saveStore(); buildRuntime(); refreshEditor();
+function edit(fn,merge){ const before=snapshot(); const lv0=LV, was=LV?JSON.stringify(Object.assign({},LV,{par:0,name:0})):null; fn();
+  if(lv0&&lv0===LV&&lv0.par&&isTerr(lv0)&&JSON.stringify(Object.assign({},lv0,{par:0,name:0}))!==was){ delete lv0.par; setTimeout(()=>note('This tank changed, so its par was cleared: click Find par.'),0); } const stranded=syncStarts(); if(!merge) UNDO.push(before); if(UNDO.length>400) UNDO.shift(); STORE.dirty=true; saveStore(); buildRuntime(); refreshEditor();
   if(stranded.length) note('Could not move the layout with it (a wide key or the F-row is in the way), so only the start moved; repaint around it: '+stranded.join(', ')+'.'); }
 function undo(){ const s=UNDO.pop(); if(!s) return note('Nothing to undo.'); const v=JSON.parse(s); STORE.levels=v.levels; STORE.zones=v.zones; STORE.dirty=true; saveStore(); setCur(v.cur); E.drawing=false; E.placing=false; buildRuntime(); refreshEditor(); note('Undone.'); }
 function note(t){ $('e-msg').textContent=t; }
@@ -866,7 +872,7 @@ function initEditor(){
   on('z-rules','change',e=>{ const z=zoneOf(LV); if(z===LOOSE) return; edit(()=>{ if(e.target.value) z.rules=e.target.value; else delete z.rules; }); });
   on('e-par','change',e=>edit(()=>{ const v=Math.floor(+e.target.value); if(v>0) LV.par=v; else delete LV.par; }));
   on('e-findpar','click',e=>{ e.target.blur(); const lv=GDOT.resolveLevel(LV,zoneOf(LV)); if(lv.rules!=='territory') return note('Par is for territory tanks: set the zone rules to territory.');
-    note('Finding par...'); setTimeout(()=>{ const r=GDOT.solvePar(lv,{budget:400000}); if(!r.solved) return note(r.exhausted?'Too big to search (400000 states). Set par by hand.':'This tank cannot be cleared.');
+    note('Finding par (up to 4 s)...'); setTimeout(()=>{ const r=GDOT.solvePar(lv,{budget:400000,ms:4000}); if(!r.solved) return note(r.exhausted?`Too big to search in 4 s (${r.nodes} states). Set par by hand, or run tools/campaign.mjs.`:'This tank cannot be cleared.');
       edit(()=>{ LV.par=r.par; }); note(`Par ${r.par}: `+r.moves.map(a=>(a.pickup?(a.pickup===a.place?'wait ':'lift '+L(a.pickup)+', '):'')+L(a.place)).join(' · ')); },30); });
   on('z-tut','change',e=>{ const z=zoneOf(LV); if(z===LOOSE) return; edit(()=>{ if(e.target.checked) z.tutorial=true; else delete z.tutorial; }); });
   on('e-coach','change',e=>edit(()=>{ const c=parseCoach(e.target.value); if(c) LV.coach=c; else delete LV.coach; }));

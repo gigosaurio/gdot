@@ -220,3 +220,4 @@ body.intro .coach{background:transparent;border-color:transparent;color:var(--mu
 .tray.terr{align-items:center} .tray .tcount{font-family:var(--disp);font-weight:400;font-size:13px;margin-left:6px;color:var(--ink)}
 .chip.parc{background:var(--key);font-family:var(--disp);font-size:14px} .chip.parc small{font-size:11px;color:var(--muted)} .chip.parc.made{background:#f6e7c1;box-shadow:0 0 0 2px #d4b24c}
 .tank.par{box-shadow:0 0 0 2px #d4b24c} .tank.replay{cursor:pointer}
+.tank.ret{box-shadow:0 0 0 2px var(--ok)}
