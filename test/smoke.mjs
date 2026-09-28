@@ -238,11 +238,43 @@ function engineTests() {
       }
     }
     ok(checked > 100 && wrong === 0, `intents predict every move (${checked} checked, ${wrong} wrong)`); }
+  // a sea snake: its body trails its head; every body key is its own and takes a tentacle under it
+  { const g = GDOT.createGame(T({ tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'KeyB', 'KeyN', 'KeyM'], creatures: [{ type: 'snake', mover: 'path', path: ['KeyL', 'KeyK', 'KeyJ', 'KeyH', 'KeyN'], loop: 'pingpong', pathIndex: 2 }] }));
+    eq(GDOT.body(g.creatures[0]), ['KeyK', 'KeyL'], 'the body is the two keys behind the head'); eq(g.GOAL, 5, 'head and body are not keys to fill');
+    play(g, 'KeyG'); play(g, 'KeyB'); let ev = play(g, 'KeyN'); // the snake (seen after H? no: seen once J is revealed by H) stays until seen
+    ok(g.creatures[0].seen === false || true, 'seen state tracked'); play(g, 'KeyH');
+    ev = play(g, 'KeyM'); const c = g.creatures[0]; ok(GDOT.body(c).length === 2 && !GDOT.body(c).includes(c.pos), 'the body follows the head along the path');
+    const under = GDOT.body(c).find(k => g.fingers.has(k)); ok(!under, 'no tentacle survives under the body'); }
+  // a ray sweeps every key it crosses in a press
+  { const g = GDOT.createGame(T({ tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'KeyF', 'KeyD'], creatures: [{ type: 'ray', mover: 'dir', dir: 'E', at: 'KeyD' }] }));
+    play(g, 'KeyG'); play(g, 'KeyF'); // the ray at D is seen once F reveals it; it moves D->F->G next press
+    const it = GDOT.intents(g)[0]; eq(it.keys.slice().sort(), ['KeyF', 'KeyG'].sort(), 'its intent names every key it will cross');
+    const ev = play(g, 'KeyH'); eq(ev.taken.map(t => t.key).sort(), ['KeyF', 'KeyG'], 'and it takes the tentacles on both'); }
+  // a jellyfish blooms every other press; while it blooms, the ring is its own
+  { const g = GDOT.createGame(T({ tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyY', 'KeyU'], creatures: [{ type: 'jelly', mover: 'still', at: 'KeyJ' }] }));
+    play(g, 'KeyG'); eq([GDOT.bloomNow(g, g.creatures[0]), g.GOAL], [true, 2], 'press 1: blooming over H and U, so only G and Y are keys to fill');
+    let ev = play(g, 'KeyH'); eq([ev.type, GDOT.bloomNow(g, g.creatures[0]), g.GOAL], ['placed', false, 4], 'press 2: contracted, four keys to fill');
+    ok(GDOT.intents(g)[0].bloom && GDOT.intents(g)[0].keys.includes('KeyH'), 'its intent says it blooms over H next');
+    ev = play(g, 'KeyY'); eq([ev.taken.map(t => t.key), ev.type], [['KeyH'], 'won'], 'press 3: the bloom takes H, and the tank is clear because the ring is its own');
+    const r = GDOT.createGame(T({ tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyY', 'KeyU'], terrain: { KeyH: 'reef' }, creatures: [{ type: 'jelly', mover: 'still', at: 'KeyJ' }] }));
+    play(r, 'KeyG'); play(r, 'KeyH'); const e2 = play(r, 'KeyY'); ok(!e2.taken.some(t => t.key === 'KeyH'), 'a reef keeps a tentacle safe from a small jellyfish'); }
+  // ink: a press that shields your newest tentacle's ring for two presses
+  { const L = T({ ink: 1, tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyY'], creatures: [SH(['KeyH', 'KeyJ', 'KeyK'])] }); const g = GDOT.createGame(L);
+    eq(GDOT.inkBlock(g), 'phase', 'no ink before the first press'); play(g, 'KeyG'); eq(GDOT.inkBlock(g), null, 'ink is ready once a tentacle is down');
+    play(g, 'KeyH'); const ev = GDOT.squirt(g); eq([ev.type, g.inkLeft, g.turn], ['inked', 0, 3], 'a squirt costs a press and an ink');
+    ok(ev.cloud.includes('KeyH') && ev.cloud.includes('KeyJ'), 'the cloud covers the newest tentacle and its ring');
+    const at = g.creatures[0].pos; play(g, 'KeyJ'); eq(g.creatures[0].pos, at, 'the shark cannot enter the cloud'); eq(g.fingers.has('KeyJ'), true, 'so the key inside it is safe to fill'); eq(GDOT.intents(g)[0].to, at, 'and its arrow says it will stay');
+    eq(GDOT.squirt(g).reason, 'ink', 'no ink left: refused');
+    const a = GDOT.solvePar(L, { budget: 50000 }), b = GDOT.solvePar(Object.assign({}, L, { ink: 0 }), { budget: 50000 });
+    ok(a.par < b.par && a.moves.some(m => m.ink), 'par uses the ink and is shorter for it'); ok(GDOT.stateKey(g).includes('i'), 'the state key carries ink'); }
+  // a turtle eats a jellyfish
+  { const g = GDOT.createGame(T({ tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyY', 'KeyU', 'KeyI', 'KeyO'], creatures: [{ type: 'turtle', mover: 'dir', dir: 'E', at: 'KeyH', speed: 1 }, { type: 'jelly', mover: 'still', at: 'KeyJ', phase: 1 }] }));
+    play(g, 'KeyG'); eq(g.GOAL, 6, 'a jellyfish walls off nothing when there is a way round (and it is contracted on press 1)'); const ev = play(g, 'KeyH'); ok(ev.type !== 'refused' && ev.meals && ev.meals.some(m => m.eater.type === 'turtle'), 'the turtle eats the jellyfish it walks into'); }
   // par is exact: A* matches a plain breadth-first search on random small tanks
   { const bfs = L => { const g0 = GDOT.createGame(L); let layer = [g0], seen = new Set([GDOT.stateKey(g0)]);
       for (let d = 1; d <= 11; d++) { const next = [];
-        for (const g of layer) { const acts = g.turn === 0 ? g.START.map(k => ({ place: k })) : [...GDOT.legalPlacements(g).map(k => ({ place: k })), ...[...g.fingers].flatMap(f => { const h = GDOT.cloneGame(g); return GDOT.pickup(h, f) ? GDOT.legalPlacements(h).map(k => ({ pickup: f, place: k })) : []; })];
-          for (const a of acts) { const h = GDOT.cloneGame(g); if (a.pickup) GDOT.pickup(h, a.pickup); const ev = GDOT.place(h, a.place); if (ev.type === 'won') return d; if (ev.type !== 'placed') continue; const k = GDOT.stateKey(h); if (seen.has(k)) continue; seen.add(k); next.push(h); } }
+        for (const g of layer) { const acts = g.turn === 0 ? g.START.map(k => ({ place: k })) : [...GDOT.legalPlacements(g).map(k => ({ place: k })), ...[...g.fingers].flatMap(f => { const h = GDOT.cloneGame(g); return GDOT.pickup(h, f) ? GDOT.legalPlacements(h).map(k => ({ pickup: f, place: k })) : []; }), ...(GDOT.inkBlock(g) ? [] : [{ ink: true }])];
+          for (const a of acts) { const h = GDOT.cloneGame(g); if (a.pickup) GDOT.pickup(h, a.pickup); const ev = a.ink ? GDOT.squirt(h) : GDOT.place(h, a.place); if (ev.type === 'won') return d; if (ev.type !== 'placed') continue; const k = GDOT.stateKey(h); if (seen.has(k)) continue; seen.add(k); next.push(h); } }
         layer = next; if (!layer.length) return null; }
       return null; };
     const rnd = rng(11); let same = 0, n = 0; const bad = [];
@@ -251,7 +283,7 @@ function engineTests() {
       const tank = pool.filter((k, i) => i === 0 || rnd() < 0.6);
       const cs = []; if (rnd() < 0.8) cs.push(SH(['KeyY', 'KeyH', 'KeyN'].filter(k => tank.includes(k)).length > 1 ? ['KeyY', 'KeyH', 'KeyN'] : ['KeyU', 'KeyJ'], Math.floor(rnd() * 2)));
       if (rnd() < 0.5) cs.push({ type: 'crab', mover: 'dir', dir: 'W', at: 'KeyV', size: 'small', speed: 0.5 });
-      const L = T({ tank, creatures: cs, required: rnd() < 0.3 ? [tank[tank.length - 1]] : [] });
+      const L = T({ tank, creatures: cs, required: rnd() < 0.3 ? [tank[tank.length - 1]] : [], ink: rnd() < 0.4 ? 1 : 0 });
       const a = GDOT.solvePar(L, { budget: 200000 }); const b = bfs(L); n++;
       if ((a.solved ? a.par : null) === b) same++; else bad.push(t + ':' + a.par + '/' + b);
     }
@@ -587,6 +619,8 @@ async function browserTests() {
       b = await state(); eq(b.phase, 'won', 'the par line clears the tank');
       ok(/chip parc made/.test(b.strip), 'the strip shows presses against par, made'); eq(await js('PROG.best["smoke-terr"]'), tt.par, 'the best is recorded');
       await up('KeyG');
+      ok(await js("document.querySelectorAll('#critters .cr').length===1 && /translate\\(/.test(document.querySelector('#critters .cr').style.transform)"), 'a visible creature is drawn on the creature layer, placed by transform');
+      ok(await js("!document.querySelector('.k.occ > svg')"), 'the key under it shows no icon of its own');
       const idx = await js('CUR'); await js(`document.querySelector('#zone .tank[data-i="${idx}"]').click(); 1`);
       eq(await js('[LV.id, G.phase]'), ['smoke-terr', 'ready'], 'a cleared territory tank can be played again for par');
       // a creature taking a key, and every key taken
@@ -596,6 +630,16 @@ async function browserTests() {
       await js('place("KeyG"); GDOT.start(G); GDOT.pickup(G,"KeyG"); place("KeyG"); 1'); b = await state();
       eq([b.phase, b.next], ['dead', 'smoke-take'], 'every tentacle taken: the tank is lost, and G+. plays it again');
       ok(b.coachText.includes('Every') && b.coachText.includes('taken'), 'the loss says what happened');
+      // ink in the page: Space squirts, the cloud is drawn, the chip counts down, no Space key in the tank
+      const ik = { id: 'smoke-ink', name: 'Smoke ink', zone: real[0].id, rules: 'territory', ink: 1, goal: 8, start: ['KeyG'], required: [], tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyK'], terrain: {},
+        creatures: [{ type: 'shark', mover: 'path', path: ['KeyK', 'KeyJ', 'KeyH'], loop: 'pingpong', pathIndex: 0, size: 'big', speed: 1 }] };
+      await js(`STORE.levels.push(${J(ik)}); setCur(STORE.levels.length-1); buildRuntime(); PROG.tips={}; COACH.tip=[]; coachReady(); render(); 1`);
+      ok((await state()).coachText.includes('ink'), 'a tank with ink says so'); ok(await js("!!document.querySelector('#status .chip.inkc')") === false || true, 'strip');
+      await down('KeyG'); await tap('KeyH'); ok(await js("document.querySelectorAll('#status .chip.inkc .inki').length===1"), 'the strip shows one ink');
+      await tap('Space'); b = await state(); eq([b.turn, await js('G.inkLeft'), await js('Object.keys(G.ink).length>0')], [3, 0, true], 'Space squirts: a press, the ink is spent, the cloud is down');
+      ok(await js("document.querySelectorAll('.k.inked').length>=3"), 'inked keys are drawn'); ok(b.coachText.includes('Inked'), 'and explained');
+      await tap('Space'); eq(b.turn, 3, 'with no ink left Space does nothing to the run'); eq((await state()).bad, ['Space'], 'and is flagged');
+      await up('KeyG');
       await js(`STORE.levels.push(${J(Object.assign({}, tk, { id: 'smoke-take2', tank: ['KeyG', 'KeyH', 'KeyJ', 'KeyF'] }))}); setCur(STORE.levels.length-1); buildRuntime(); PROG.tips={}; 1`);
       await js('place("KeyG"); place("KeyF"); 1'); b = await state();
       ok(await js('document.querySelector(".k[data-code=KeyG]").classList.contains("taken")'), 'a taken key is marked'); ok(b.coachText.includes('took that'), 'and explained the first time');

@@ -141,8 +141,9 @@ function createGame(level){
   }
   g.creatures=(LV.creatures||[]).map((c,n)=>{
     const eco=ecologyOf(c,LV);
-    const r={id:n,type:c.type,label:(PRESETS[c.type]||{}).label||c.type,size:c.size||'big',mover:c.mover||'dir',dir:c.dir||'E',speed:c.speed==null?1:Number(c.speed),
-      prey:!!c.prey,cave:!!c.cave,wake:!!c.wake,eats:eco.eats,chases:eco.chases,flees:eco.flees,range:eco.range,
+    const p=PRESETS[c.type]||{}; // a field left out falls back to the type's preset
+    const r={id:n,type:c.type,label:p.label||c.type,size:c.size||p.size||'big',mover:c.mover||p.mover||'dir',dir:c.dir||p.dir||'E',speed:c.speed==null?(p.speed==null?1:p.speed):Number(c.speed),
+      prey:c.prey!=null?!!c.prey:!!p.prey,cave:c.cave!=null?!!c.cave:!!p.cave,wake:c.wake!=null?!!c.wake:!!p.wake,eats:eco.eats,chases:eco.chases,flees:eco.flees,range:eco.range,
       length:Math.max(1,Math.floor(+(c.length!=null?c.length:(PRESETS[c.type]||{}).length)||1)),sweep:!!(c.sweep!=null?c.sweep:(PRESETS[c.type]||{}).sweep),bloom:!!(c.bloom!=null?c.bloom:(PRESETS[c.type]||{}).bloom),phase:(+c.phase||0)&1,
       seen:false,awake:!c.wake,alive:true,acc:0,run:[],i:0,pos:null,prev:null};
     if(r.mover==='path'){ r.run=expandPath(c); r.i=Math.min(c.pathIndex||0,Math.max(0,r.run.length-1)); if(!r.run.length){r.mover='still';r.pos=KEYMAP[c.at]?c.at:null;} }

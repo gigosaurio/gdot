@@ -1,0 +1,25 @@
+{
+  // G. — its own worker, its own subdomain: https://g.gigomakes.com/ → play.html
+  //
+  // First-time setup (once, in your own terminal, logged in or with CLOUDFLARE_API_TOKEN set):
+  //   npx wrangler d1 create gdot-telemetry          → paste the printed database_id below
+  //   npx wrangler d1 execute gdot-telemetry --remote --file=worker/telemetry-schema.sql
+  //   npx wrangler secret put TELEMETRY_KEY           (gates /api/telemetry/export)
+  // Deploy:  npx wrangler deploy          (wrangler adds the g.gigomakes.com custom domain on first deploy)
+  // Preview: npx wrangler versions upload
+  //
+  // Uploaded: play.html and what it loads. .assetsignore keeps studio.html, test/, tools/, worker/ and the
+  // notes off the public site (run studio.html locally: python serve.py 8788).
+  "name": "gdot",
+  "compatibility_date": "2026-06-16",
+  "main": "worker/index.js",
+  "observability": { "enabled": true },
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  "vars": { "ENVIRONMENT": "production" },
+  "workers_dev": false,
+  "routes": [{ "pattern": "g.gigomakes.com", "custom_domain": true }],
+  "d1_databases": [
+    { "binding": "TELEMETRY", "database_name": "gdot-telemetry", "database_id": "REPLACE_WITH_ID_FROM_wrangler_d1_create" }
+  ],
+  "assets": { "directory": ".", "binding": "ASSETS", "html_handling": "auto-trailing-slash", "not_found_handling": "none" }
+}

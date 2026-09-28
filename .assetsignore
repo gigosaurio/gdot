@@ -1,7 +1,12 @@
-# Not uploaded to g.gigomakes.com (wrangler.gdot.jsonc uses this folder as its asset root).
-# The studio (editor + designer view) runs locally: open studio.html from the dev server.
+# Not uploaded to g.gigomakes.com (wrangler.jsonc uses the repo root as its asset root).
+# The studio (the editor) runs locally: python serve.py 8788, then /studio.html.
 studio.html
 test
 tools
+worker
 *.md
+*.py
 .assetsignore
+.gitignore
+.git
+wrangler.jsonc

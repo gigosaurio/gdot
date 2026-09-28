@@ -31,7 +31,19 @@ fewest presses (`GDOT.solvePar`, an exact search; `par` is stored on each tank b
 studio's Find par). The header shows par and your best; a cleared tank can be clicked in the zone strip to
 play it again for par.
 
-**Classic** (the other zones until they are rebuilt).
+**Alive** (2026-09-28). Every creature shows its intent: an arrow toward its next key, and a dashed
+border on every key it will cover after your next press. Creatures live on their own layer and glide
+between keys (a lo-fi stepped motion; off under reduced motion), bubbles rise, algae sways. New creatures
+that use more of the tank: the **sea snake** (a path creature whose body trails two keys behind its head;
+all of it is its own), the **ray** (glides two keys a press and takes any tentacle on the keys it crosses),
+the **jellyfish** (every other press it blooms over the keys around it; those keys are its own while it
+blooms, so finishing on a bloom press counts them; a reef protects a tentacle from its sting) and the
+**turtle** (slow; eats jellyfish). And an octopus power, **ink**: tanks with `ink: N` give N squirts; tap
+Space (in a tank where Space is not water) and everything moves, then a cloud lands on your newest tentacle
+and the keys around it; no creature can enter those keys for the next two presses. It costs a press, and par
+counts it as a move.
+
+**Classic** (kept in the engine and in test/fixtures/classic-levels.js; no zone uses it now).
 
 Current classic rules (2026-09-26): tap any revealed key to place a tentacle, it stays; tap a
 tentacle to pick it up; keep at least one key held at all times. The footer's **no holding** box
@@ -94,6 +106,22 @@ Spec and design notes: the "Octopus Keyboard — Level 1 Spec" doc in Claude.
 | `tools/campaign.mjs` | How `levels.js` was made: hand specs (keys by label) and seeded recipes, every level fenced and solver-checked. |
 
 ## Ship it
+
+The repo is its own Cloudflare worker: `wrangler.jsonc` at the root serves the repo as static assets
+(`.assetsignore` keeps the studio, tests, tools and notes off the site), "/" opens play.html, and
+`worker/` takes the opt-in telemetry into a D1 database. Once, in your own terminal:
+
+```
+npx wrangler login                                   # or set CLOUDFLARE_API_TOKEN
+npx wrangler d1 create gdot-telemetry                # paste the printed database_id into wrangler.jsonc
+npx wrangler d1 execute gdot-telemetry --remote --file=worker/telemetry-schema.sql
+npx wrangler secret put TELEMETRY_KEY
+```
+
+Then, each time: `npx wrangler deploy` (g.gigomakes.com is added on the first deploy; the older
+gigomakes-repo worker for the same name is replaced, since both are the worker "gdot").
+
+### The old way (gigomakes repo)
 
 G. has its own worker, like Impulse: `wrangler.gdot.jsonc` runs the shared `worker/index.js` with
 `games/gdot` as the site root, so **https://g.gigomakes.com/** opens `play.html`. The main gigomakes
