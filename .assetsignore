@@ -1,12 +1,15 @@
 # Not uploaded to g.gigomakes.com (wrangler.jsonc uses the repo root as its asset root).
 # The studio (the editor) runs locally: python serve.py 8788, then /studio.html.
 studio.html
-test
-tools
-worker
+test/
+tools/
+worker/
+.github/
+.git/
+node_modules/
 *.md
 *.py
+*.json
+*.jsonc
 .assetsignore
 .gitignore
-.git
-wrangler.jsonc
