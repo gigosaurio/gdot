@@ -250,17 +250,14 @@ export function terrRollout(level, policy, rand, cap) {
       const aimed = new Set(GDOT.intents(g).map(t => t.to));
       const threat = [...g.fingers].filter(k => aimed.has(k));
       const h = GDOT.cloneGame(g); let pick = null;
-      if (threat.length && g.fingers.size > 1 && g.LIFT !== 'none' && GDOT.pickup(h, threat[0])) pick = threat[0];
-      const safe = GDOT.legalPlacements(h).filter(k => !aimed.has(k) && k !== pick);
-      if (safe.length) act = pick ? { pickup: pick, place: safe[Math.floor(rand() * safe.length)] } : { place: safe[Math.floor(rand() * safe.length)] };
-      else {
-        const still = [...g.fingers].filter(k => !aimed.has(k));
-        if (still.length && g.LIFT !== 'none') { const w = still[Math.floor(rand() * still.length)]; act = { pickup: w, place: w }; }
-        else { const ks = GDOT.legalPlacements(g); if (!ks.length) return { result: 'stuck', turn: g.turn }; act = { place: ks[Math.floor(rand() * ks.length)] }; }
-      }
+      if (threat.length && g.fingers.size > 1 && g.LIFT !== 'none') act = { lift: threat[0] }; // a lift is a press: it saves the tentacle, nothing else
+      else { const safe = GDOT.legalPlacements(g).filter(k => !aimed.has(k));
+        if (safe.length) act = { place: safe[Math.floor(rand() * safe.length)] };
+        else { const still = [...g.fingers].filter(k => !aimed.has(k)); if (still.length > 1 && g.LIFT !== 'none') act = { lift: still[Math.floor(rand() * still.length)] };
+          else { const ks = GDOT.legalPlacements(g); if (!ks.length) return { result: 'stuck', turn: g.turn }; act = { place: ks[Math.floor(rand() * ks.length)] }; } } }
     }
     if (act.pickup && !GDOT.pickup(g, act.pickup)) return { result: 'stuck', turn: g.turn };
-    const ev = GDOT.place(g, act.place);
+    const ev = act.lift ? GDOT.liftTurn(g, act.lift) : GDOT.place(g, act.place);
     if (ev.type === 'refused') return { result: 'stuck', turn: g.turn };
     if (ev.type === 'dead') return { result: 'dead', turn: g.turn };
     if (ev.type === 'won') return { result: 'won', turn: g.turn };
@@ -278,9 +275,9 @@ export function analyzeTerritory(level, opts = {}) {
   const cap = Math.max(20, (s.par || g.GOAL) * 4);
   const greedy = terrPlayers(level, 'greedy', { rollouts: opts.rollouts || 1000, seed: opts.seed, cap });
   const random = terrPlayers(level, 'random', { rollouts: opts.rollouts || 1000, seed: opts.seed, cap });
-  const fmt = a => (a.pickup ? (a.pickup === a.place ? 'wait@' : GDOT.L(a.pickup) + '>') : '') + GDOT.L(a.place);
+  const fmt = a => a.ink ? 'INK' : a.lift ? 'lift ' + GDOT.L(a.lift) : (a.pickup ? GDOT.L(a.pickup) + '>' : '') + GDOT.L(a.place);
   return { id: level.id, name: level.name, territory: true, ...describe(level), keys: g.GOAL, par: s.par, solvable: s.solved, exhausted: s.exhausted, nodes: s.nodes,
-    solution: s.moves ? s.moves.map(fmt) : null, waits: s.moves ? s.moves.filter(a => a.pickup).length : null, greedy, random, ms: Date.now() - t0 };
+    solution: s.moves ? s.moves.map(fmt) : null, waits: s.moves ? s.moves.filter(a => a.pickup || a.lift).length : null, greedy, random, ms: Date.now() - t0 };
 }
 export const HEADER_T = ['level'.padEnd(15), 'keys', ' par', 'lifts', ' greedy', 'g-avg', 'g-best', ' g-lost', ' random', ' nodes'].join(' ');
 export function rowT(a) {

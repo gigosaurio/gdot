@@ -375,6 +375,17 @@ function territoryEnd(g,code,ev){
   return (g.last=out);
 }
 
+// Territory: lifting is a press. Everything moves first (it may take the tentacle you meant to lift), then it comes up.
+// Event: {type:'lifted'|'won'|'dead', code, taken, ...}
+function liftTurn(g,code){
+  const why=liftBlock(g,code); if(why) return {type:'refused',reason:why,code};
+  g.turn++; tickInk(g); for(const c of g.creatures){ c.prev=c.pos; c.vis0=isVisible(g,c); }
+  const {stepped,meals}=stepAll(g);
+  const woke=[]; for(const c of g.creatures) if(c.alive&&!c.awake&&(g.fingers.has(c.pos)||NEI[c.pos].some(n=>g.fingers.has(n)))){c.awake=true;c.seen=true;woke.push(c);}
+  const ev=territoryEnd(g,null,{stepped,meals,woke,newly:[]});
+  if(g.phase==='play'&&g.fingers.has(code)){ g.fingers.delete(code); g.liftPending=true; g.lifted=code; tally(g); ev.left=g.left; if(!g.fingers.size){ g.phase='dead'; ev.type='dead'; ev.kind='overrun'; ev.cause='overrun'; ev.why='Every tentacle was taken.'; } }
+  if(ev.type==='placed') ev.type='lifted'; ev.code=code; return (g.last=ev);
+}
 // Ink (territory tanks that give it, level.ink): one press; everything moves first, then a cloud lands on your
 // newest tentacle and the keys around it, and no creature can enter those keys for the next INK_TURNS presses.
 function inkBlock(g){ if(g.MODE!=='territory') return 'mode'; if(g.phase!=='play') return 'phase'; if(!g.inkLeft) return 'empty'; if(!g.newest||!g.fingers.has(g.newest)) return 'nowhere'; return null; }
@@ -390,15 +401,14 @@ function squirt(g){
 }
 
 /* ================= par: the fewest presses (territory) ================= */
-// A* over whole game states. A move is one press, alone or after a free lift ({pickup, place}; pickup
-// equal to place is a wait). The estimate below never overestimates, so the first clear found is the shortest. Returns {solved, par, moves, nodes, exhausted}.
+// A* over whole game states. A move is one press: {place}, {lift} or {ink}. The estimate below never overestimates, so the first clear found is the shortest. Returns {solved, par, moves, nodes, exhausted}.
 function solvePar(level,opts){
   const budget=(opts&&opts.budget)||200000, g0=createGame(level);
   if(g0.MODE!=='territory') return {solved:false,par:null,moves:null,nodes:0,exhausted:false,reason:'not a territory level'};
   const moves=g=>{ const out=[];
     if(g.phase==='ready'||g.turn===0){ for(const k of g.START) out.push({place:k}); return out; }
     for(const k of legalPlacements(g)) out.push({place:k});
-    if(g.LIFT!=='none') for(const f of g.fingers){ const h=cloneGame(g); if(!pickup(h,f)) continue; for(const k of legalPlacements(h)) out.push({pickup:f,place:k}); }
+    if(g.LIFT!=='none'&&g.fingers.size>1) for(const f of g.fingers) if(!liftBlock(g,f)) out.push({lift:f});
     if(!inkBlock(g)) out.push({ink:true});
     return out; };
   const heap=[], push=n=>{ heap.push(n); let i=heap.length-1; while(i){ const p=(i-1)>>1; if(less(heap[p],heap[i])) break; [heap[p],heap[i]]=[heap[i],heap[p]]; i=p; } };
@@ -410,7 +420,7 @@ function solvePar(level,opts){
   const est=g=>Math.max(0,g.tsize-g.fingers.size-movers(g),Math.ceil(g.left/(1+movers(g))));
   const deadline=opts&&opts.ms?Date.now()+opts.ms:0;
   const pathOf=n=>{ const p=[]; for(let x=n;x&&x.parent;x=x.parent) p.unshift(x.act); return p; };
-  const rebuild=n=>{ const g=createGame(level); for(const a of pathOf(n)){ if(a.ink){ squirt(g); continue; } if(a.pickup) pickup(g,a.pickup); place(g,a.place); } return g; }; // nodes stay small: no game copies kept
+  const rebuild=n=>{ const g=createGame(level); for(const a of pathOf(n)){ if(a.ink){ squirt(g); continue; } if(a.lift){ liftTurn(g,a.lift); continue; } if(a.pickup) pickup(g,a.pickup); place(g,a.place); } return g; }; // nodes stay small: no game copies kept
   const best=new Map(); let nodes=0;
   push({f:est(g0),turn:0,won:false,parent:null,act:null}); best.set(stateKey(g0),0);
   while(heap.length){
@@ -420,7 +430,7 @@ function solvePar(level,opts){
     const g=rebuild(n);
     for(const a of moves(g)){
       const h=cloneGame(g); if(a.pickup&&!pickup(h,a.pickup)) continue;
-      const ev=a.ink?squirt(h):place(h,a.place); if(ev.type==='refused'||ev.type==='noop'||ev.type==='dead') continue;
+      const ev=a.ink?squirt(h):a.lift?liftTurn(h,a.lift):place(h,a.place); if(ev.type==='refused'||ev.type==='noop'||ev.type==='dead') continue;
       const k=stateKey(h); if(best.has(k)&&best.get(k)<=h.turn) continue; best.set(k,h.turn);
       push({f:h.turn+(h.phase==='won'?0:est(h)),turn:h.turn,won:h.phase==='won',parent:n,act:a});
     }
@@ -517,5 +527,5 @@ function stateKey(g){
 
 return {ROWY,KEYS,KEYMAP,IDX,NEI,DIRS,OPP,L,adjacent,PRESETS,TYPES,TARGETS,MOVERS,HEADINGS,TERRAINS,LIFTS,clone,slug,expandPath,normalizeLevel,resolveLevel,ecologyOf,
   levelsSource,tankWater,shiftKey,shiftLevel,rowOffset,latticeOffset,createGame,cloneGame,isRock,passable,grip,distMap,targetKeys,moveOnce,stepAll,stepCreature,hidden,canEat,isVisible,lane,reveal,
-  intents,tickInk,body,footprint,bloomNow,inked,INK_TURNS,inkBlock,squirt,territory,unfilled,fillable,tally,creatureKeys,territoryEnd,solvePar,start,kill,liftBlock,pickup,placeBlock,place,legalPlacements,stateKey};
+  intents,tickInk,body,footprint,bloomNow,inked,INK_TURNS,inkBlock,squirt,liftTurn,territory,unfilled,fillable,tally,creatureKeys,territoryEnd,solvePar,start,kill,liftBlock,pickup,placeBlock,place,legalPlacements,stateKey};
 });

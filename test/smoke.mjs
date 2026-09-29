@@ -176,7 +176,7 @@ function engineTests() {
     if (!s.solved && played.rules !== 'territory') s = solve(played, { budget: 60000, pickups: true });
     if (played.rules === 'territory' && s.solved) eq(s.par, level.par, `${level.name}: par in levels.js matches the solver`);
     ok(s.solved, `${level.name}: solver finds a clear`);
-    if (s.solved) { const r = GDOT.createGame(played); for (const m of s.moves) { if (m.ink) { GDOT.squirt(r); continue; } if (m.pickup) GDOT.pickup(r, m.pickup); GDOT.place(r, m.place); } eq(r.phase, 'won', `${level.name}: the line replays to a clear`); }
+    if (s.solved) { const r = GDOT.createGame(played); for (const m of s.moves) { if (m.ink) { GDOT.squirt(r); continue; } if (m.lift) { GDOT.liftTurn(r, m.lift); continue; } if (m.pickup) GDOT.pickup(r, m.pickup); GDOT.place(r, m.place); } eq(r.phase, 'won', `${level.name}: the line replays to a clear`); }
   }
 }
 
@@ -274,8 +274,8 @@ function engineTests() {
   // par is exact: A* matches a plain breadth-first search on random small tanks
   { const bfs = L => { const g0 = GDOT.createGame(L); let layer = [g0], seen = new Set([GDOT.stateKey(g0)]);
       for (let d = 1; d <= 11; d++) { const next = [];
-        for (const g of layer) { const acts = g.turn === 0 ? g.START.map(k => ({ place: k })) : [...GDOT.legalPlacements(g).map(k => ({ place: k })), ...[...g.fingers].flatMap(f => { const h = GDOT.cloneGame(g); return GDOT.pickup(h, f) ? GDOT.legalPlacements(h).map(k => ({ pickup: f, place: k })) : []; }), ...(GDOT.inkBlock(g) ? [] : [{ ink: true }])];
-          for (const a of acts) { const h = GDOT.cloneGame(g); if (a.pickup) GDOT.pickup(h, a.pickup); const ev = a.ink ? GDOT.squirt(h) : GDOT.place(h, a.place); if (ev.type === 'won') return d; if (ev.type !== 'placed') continue; const k = GDOT.stateKey(h); if (seen.has(k)) continue; seen.add(k); next.push(h); } }
+        for (const g of layer) { const acts = g.turn === 0 ? g.START.map(k => ({ place: k })) : [...GDOT.legalPlacements(g).map(k => ({ place: k })), ...(g.fingers.size > 1 ? [...g.fingers].filter(f => !GDOT.liftBlock(g, f)).map(f => ({ lift: f })) : []), ...(GDOT.inkBlock(g) ? [] : [{ ink: true }])];
+          for (const a of acts) { const h = GDOT.cloneGame(g); if (a.pickup) GDOT.pickup(h, a.pickup); const ev = a.ink ? GDOT.squirt(h) : a.lift ? GDOT.liftTurn(h, a.lift) : GDOT.place(h, a.place); if (ev.type === 'won') return d; if (ev.type !== 'placed') continue; const k = GDOT.stateKey(h); if (seen.has(k)) continue; seen.add(k); next.push(h); } }
         layer = next; if (!layer.length) return null; }
       return null; };
     const rnd = rng(11); let same = 0, n = 0; const bad = [];
@@ -449,7 +449,7 @@ async function browserTests() {
         let sol = lvl.rules === 'territory' ? GDOT.solvePar(lvl, { budget: 600000 }) : solve(lvl, { budget: 200000 }); if (!sol.solved && lvl.rules !== 'territory') sol = solve(lvl, { budget: 400000, pickups: true, wait: true });
         ok(sol.solved, `tutorial tank ${i + 1} is solvable`); if (!sol.solved) break;
         ok(!sol.moves.some(m => m.place === 'KeyG' || m.pickup === 'KeyG'), `tutorial tank ${i + 1} never needs G (the test holds it)`);
-        for (const m of sol.moves) { if (m.pickup) await tap(m.pickup); await tap(m.place); }
+        for (const m of sol.moves) { if (m.ink) { await tap('Space'); continue; } if (m.lift) { await tap(m.lift); continue; } if (m.pickup) await tap(m.pickup); await tap(m.place); }
         t = await state(); eq(t.phase, 'won', `tutorial tank ${i + 1} cleared with real key presses`); ok(t.coachText.length > 0, `tutorial tank ${i + 1} has a line for the clear`);
       }
       eq(await js('PROG.tutorial'), 'done', 'clearing the last tutorial tank finishes the tutorial');
@@ -865,7 +865,7 @@ async function browserTests() {
         await js(`setCur(levelIndex(${JSON.stringify(l.id)})); buildRuntime(); 1`);
         const inT = new Set(lvl.tank || []); const hold = ['KeyQ', 'KeyP', 'KeyZ', 'KeyT', 'KeyG', 'KeyA', 'KeyM', 'KeyX'].find(k => !inT.has(k) && !line.some(m => m.place === k || m.pickup === k));
         await down(hold); // an anchor finger that is not in the way, as a player keeps one key down
-        for (const m of line) { if (m.ink) { await tap('Space'); continue; } if (m.pickup) await tap(m.pickup); await tap(m.place); }
+        for (const m of line) { if (m.ink) { await tap('Space'); continue; } if (m.lift) { await tap(m.lift); continue; } if (m.pickup) await tap(m.pickup); await tap(m.place); }
         const ph = await js('G.phase'); eq(ph, 'won', `${l.name}: its par line clears it with real presses${line.some(m => m.ink) ? ' (ink included)' : ''}`); await up(hold);
       }
     }

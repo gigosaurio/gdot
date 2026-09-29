@@ -438,6 +438,7 @@ const TIPS={
   left:'You left mid-run, which counts as a loss, so the tank sent you on.',
   max:'Only {max} tentacles here: lift one to move it.',
   'lift-one':'One lift at a time here: put it down before lifting another.',
+  'lift-costs':'Lifting a {tentacle} is a press too: everything moves first, then it comes up.',
   'lift-none':'{lock} Tentacles stay where they land here.',
   won:'Clear! Each cleared tank shows as a {tentacle} in the zone bar up top. Clear them all to open the next zone.',
   sent:'A loss sends you to another tank of this zone. Clear them all to move on.',
@@ -454,8 +455,9 @@ const TIPS={
   turtle:'{turtle} Turtle: slow, and it eats jellyfish.',
   ink:'This tank gives you {ink} ink: tap {Space}. Everything moves, then a cloud around your newest {tentacle} keeps creatures out for two presses. It costs a press.',
   'ink-used':'{ink} Inked: no creature can enter the cloud for two presses. Fill inside it.',
-  territory:'Fill every open key: the tray counts them. A creature\'s key is its own. Par is the fewest presses.',
+  territory:'Fill every open key: the tray counts them. A creature\'s key is its own. Par is the fewest presses. Lifting a {tentacle} is a press too.',
   taken:'A creature took that {tentacle}. Its key is free again once it leaves: fill it then.',
+  lift:'Lifting a {tentacle} is a press: everything moves, then it comes up. Lift and put back to wait, for two presses.',
   grow:'The {starfish} turned the algae around it into water: more to fill.',
   'dead-overrun':'Every {tentacle} was taken. Keep one out of every creature\'s way.',
   reach:'Only keys next to one of your {tentacle}s.',
@@ -600,6 +602,7 @@ window.addEventListener('keyup',e=>{
       if(dt<TAP_MS&&G.fingers.has(code)){
         const block=GDOT.liftBlock(G,code);
         if(block){ CUE.nolift=code; audio.refuse(code); say(block==='none'?'Tentacles stay where they land here.':'One at a time: place the lifted tentacle first.'); coachSet(block); tip('lift-'+block); }
+        else if(G.MODE==='territory'){ const ev=GDOT.liftTurn(G,code); if(ev.type==='refused'){ CUE.nolift=code; audio.refuse(code); } else { settle(ev); if(G.phase==='play'){ say(`Lifted from ${L(code)}: a press.`); coachSet('lift'); render(); } } } // territory: a lift is a press
         else { GDOT.pickup(G,code); CUE={}; say(`Lifted from ${L(code)}.`); coachSet('lift'); }
       } }
     if(held.size===0&&mustHold()) return letGo('You let go.','letgo');
@@ -771,7 +774,7 @@ function tray(){
     const found=G.REQ.filter(k=>G.revealed.has(k)||G.fingers.has(k)||isEdit());
     if(found.length) h+='<span class="reqs">'+found.map(k=>`<span class="cap req${G.grown.has(k)?' down':''}"><i class="cstar">${ICON.starfish}</i>${esc(L(k))}</span>`).join('')+'</span>';
     h+='</span>';
-    if(G.liftPending) h+=`<span class="chip lifted"><i class="ico">${ICON.up}</i><i class="ico">${ICON.tentacle}</i>${G.LIFT==='one'?`<i class="ico lockd">${ICON.lock}</i>`:''}</span>`;
+    if(G.liftPending&&G.LIFT==='one') h+=`<span class="chip lifted"><i class="ico">${ICON.up}</i><i class="ico">${ICON.tentacle}</i><i class="ico lockd">${ICON.lock}</i></span>`;
     if(G.inkLeft>0||(LV.ink>0&&G.phase==='play')) h+=`<span class="chip inkc${G.inkLeft?'':' out'}" title="ink: tap Space">${cap('Space')}${'<i class="ico inki">'+ICON.ink+'</i>'.repeat(Math.max(0,G.inkLeft))}</span>`;
     return h; }
   const found=G.REQ.filter(k=>G.revealed.has(k)||G.fingers.has(k)||isEdit());

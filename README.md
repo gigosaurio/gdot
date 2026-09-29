@@ -32,7 +32,8 @@ few presses as you can. Creatures show where they go next: an arrow on each, and
 key it will take. A creature that lands on one of your tentacles takes that key (the tentacle is gone; the
 key is free again once it leaves); nothing kills you outright, and the tank is only lost when every
 tentacle is taken, which plays it again. You can only grab keys next to one of your tentacles (putting back
-the one you just lifted is always fine). Lifting is free; lift and put back is a one-press wait. A starfish,
+the one you just lifted is always fine). Lifting is a press too (2026-09-29; it was free before): everything moves first, then the tentacle comes
+up, so lift and put back is a two-press wait. A starfish,
 once held, turns the algae around it into water: more to fill. The tank is clear when every key of the
 territory (grip keys joined to the start; urchins are walls) is yours or has a creature on it. Since
 2026-09-28 the first press shows the whole tank at once (creatures inside caves stay hidden and sleepers
