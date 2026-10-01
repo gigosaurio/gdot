@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Proto A · Feel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Silkscreen&display=swap">
+<link rel="stylesheet" href="proto.css">
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>A · Feel <small>still water · one number per arm</small></h1>
+    <div class="hud">
+      <div><span>tank</span><b id="h-tank">–</b></div>
+      <div><span>to fill</span><b id="h-left">–</b></div>
+      <div><span>creatures</span><b id="h-cr">–</b></div>
+      <div><span>presses</span><b id="h-press">0</b></div>
+    </div>
+  </header>
+  <div class="plate"><div id="board"></div></div>
+  <div class="status" id="status"></div>
+  <div class="roster" id="roster"></div>
+  <p class="help"><b>The tank is dark and nothing moves.</b> Each key you press, an arm settles there and feels around: the number is how many
+    creature keys touch that arm (keyboard neighbours, so Space feels a lot and a corner feels little). Press a creature and it bites.
+    Fill every key the creatures do not hold. A starfish is harmless: landing on one lights up its whole ring. Every tank can be finished without a guess.</p>
+  <footer>
+    <button id="b-again">Same tank <kbd>Bksp</kbd></button>
+    <button id="b-new">New tank <kbd>Enter</kbd></button>
+    <button id="b-hint">What is certain? <kbd>Tab</kbd></button>
+    <span><kbd>Shift</kbd>+key or right-click marks a creature</span>
+    <a href="index.html">all prototypes</a>
+  </footer>
+</div>
+<script src="kb.js"></script>
+<script>
+(function(){
+'use strict';
+const {NEI,DIRS,KEYMAP,L,codes,SPR,board,keys,rng,pick}=KB;
+const DANGER=new Set(['crab','eel','jelly']);
+const INFO={crab:'crab: one key, anywhere',eel:'eel: three keys in a straight row',jelly:'jellyfish: one key, always in the top row of the tank',star:'starfish: harmless; land on it and it lights its whole ring'};
+// Tanks are written by key label. The roster is what lives in them.
+const TANKS=[
+  {name:'Letters', keys:'Q W E R T Y U I O P A S D F G H J K L ; Z X C V B N M , . /', roster:{crab:3,eel:1,jelly:1,star:1}},
+  {name:'Numbers down', keys:'1 2 3 4 5 6 7 8 9 0 Q W E R T Y U I O P A S D F G H J K L ;', roster:{crab:4,eel:1,jelly:1,star:1}},
+  {name:'Home and Space', keys:'A S D F G H J K L ; Z X C V B N M , . / Space Alt Win', roster:{crab:3,eel:1,jelly:1,star:1}},
+];
+// ---- world ----
+function makeWorld(tank,roster,r){
+  const keysArr=[...tank], world=new Map(); const free=()=>keysArr.filter(k=>!world.has(k));
+  const topRow=Math.min(...keysArr.map(k=>KEYMAP[k].row));
+  for(let i=0;i<(roster.eel||0);i++){ const spots=free().filter(a=>{ const b=DIRS[a].E, c=b&&DIRS[b].E; return b&&c&&tank.has(b)&&tank.has(c)&&!world.has(b)&&!world.has(c); }); if(!spots.length) return null; const a=pick(r,spots), b=DIRS[a].E, c=DIRS[b].E; world.set(a,'eel'); world.set(b,'eel'); world.set(c,'eel'); }
+  for(let i=0;i<(roster.jelly||0);i++){ const spots=free().filter(k=>KEYMAP[k].row===topRow); if(!spots.length) return null; world.set(pick(r,spots),'jelly'); }
+  for(let i=0;i<(roster.crab||0);i++){ const s=free(); if(!s.length) return null; world.set(pick(r,s),'crab'); }
+  for(let i=0;i<(roster.star||0);i++){ const s=free(); if(!s.length) return null; world.set(pick(r,s),'star'); }
+  return world;
+}
+const count=(g,k)=>NEI[k].reduce((n,x)=>n+(g.tank.has(x)&&DANGER.has(g.world.get(x))?1:0),0);
+const starNear=(g,k)=>NEI[k].some(x=>g.tank.has(x)&&g.world.get(x)==='star'&&!g.stars.has(x));
+function newState(tank,world,start){ let total=0; for(const t of world.values()) if(DANGER.has(t)) total++; return {tank,world,start,total,arms:new Set(),stars:new Set(),known:new Set(),marks:new Set(),dead:null,won:false,presses:0,log:[]}; }
+// open a key as the player would: an arm, a cascade from 0, a starfish ping
+function open(g,k){
+  if(g.arms.has(k)||g.stars.has(k)) return;
+  if(g.world.get(k)==='star'){ g.stars.add(k); g.marks.delete(k); for(const n of NEI[k]) if(g.tank.has(n)){ if(DANGER.has(g.world.get(n))){ g.known.add(n); g.marks.delete(n); } else open(g,n); } return; }
+  g.arms.add(k); g.marks.delete(k);
+  if(count(g,k)===0) for(const n of NEI[k]) if(g.tank.has(n)) open(g,n);
+}
+const won=g=>[...g.tank].every(k=>DANGER.has(g.world.get(k))||g.arms.has(k)||g.stars.has(k));
+// ---- what is certain: exact over the frontier, by component; roster totals bound the rest ----
+function deduce(g){
+  const unknown=new Set([...g.tank].filter(k=>!g.arms.has(k)&&!g.stars.has(k)&&!g.known.has(k)));
+  const remaining=g.total-g.known.size;
+  const cons=[];
+  for(const a of g.arms){ const vars=[]; let kn=0; for(const n of NEI[a]) if(g.tank.has(n)){ if(unknown.has(n)) vars.push(n); else if(g.known.has(n)) kn++; } if(vars.length) cons.push({vars,need:count(g,a)-kn}); }
+  const parent=new Map(); const find=x=>{ while(parent.get(x)!==x){ parent.set(x,parent.get(parent.get(x))); x=parent.get(x); } return x; };
+  for(const c of cons) for(const v of c.vars) if(!parent.has(v)) parent.set(v,v);
+  for(const c of cons) for(let i=1;i<c.vars.length;i++){ const a=find(c.vars[0]),b=find(c.vars[i]); if(a!==b) parent.set(a,b); }
+  const comps=new Map(); for(const v of parent.keys()){ const r=find(v); if(!comps.has(r)) comps.set(r,[]); comps.get(r).push(v); }
+  const frontier=new Set(parent.keys()); const rest=[...unknown].filter(k=>!frontier.has(k));
+  const safe=[],beast=[]; let minTot=0,maxTot=0,unsure=false;
+  for(const vars of comps.values()){
+    const idx=new Map(vars.map((v,i)=>[v,i])); const cs=cons.filter(c=>idx.has(c.vars[0])).map(c=>({is:c.vars.map(v=>idx.get(v)),need:c.need}));
+    const byVar=vars.map(()=>[]); cs.forEach((c,ci)=>c.is.forEach(i=>byVar[i].push(ci)));
+    const sum=cs.map(()=>0), left=cs.map(c=>c.is.length), can=[vars.map(()=>false),vars.map(()=>false)], val=new Array(vars.length).fill(0);
+    const room=unknown.size-vars.length; let cmin=Infinity,cmax=-1,n=0,capped=false;
+    (function rec(i,s){
+      if(capped) return; if(n>150000){ capped=true; return; }
+      if(s>remaining||s+(vars.length-i)<remaining-room) return;
+      if(i===vars.length){ n++; cmin=Math.min(cmin,s); cmax=Math.max(cmax,s); for(let j=0;j<vars.length;j++) can[val[j]][j]=true; return; }
+      for(const v of [0,1]){ val[i]=v; let fine=true; for(const ci of byVar[i]){ sum[ci]+=v; left[ci]--; if(sum[ci]>cs[ci].need||sum[ci]+left[ci]<cs[ci].need) fine=false; }
+        if(fine) rec(i+1,s+v); for(const ci of byVar[i]){ sum[ci]-=v; left[ci]++; } }
+    })(0,0);
+    if(capped||n===0){ unsure=true; continue; }
+    vars.forEach((v,j)=>{ if(can[0][j]&&!can[1][j]) safe.push(v); else if(can[1][j]&&!can[0][j]) beast.push(v); });
+    minTot+=cmin; maxTot+=cmax;
+  }
+  if(rest.length&&!unsure){ if(remaining-minTot===0) safe.push(...rest); else if(remaining-maxTot===rest.length) beast.push(...rest); }
+  return {safe,beast};
+}
+// plays the tank the way a careful player would; false when a guess would be needed
+function solvable(g0){
+  const g={tank:g0.tank,world:g0.world,total:g0.total,arms:new Set(g0.arms),stars:new Set(g0.stars),known:new Set(g0.known),marks:new Set()};
+  let rounds=0;
+  while(!won(g)){ const d=deduce(g); if(!d.safe.length&&!d.beast.length) return false; for(const k of d.beast) g.known.add(k); for(const k of d.safe) open(g,k); if(++rounds>200) return false; }
+  return rounds;
+}
+function generate(ti,seed){
+  const spec=TANKS[ti%TANKS.length], tank=new Set(codes(spec.keys)), r=rng(seed*7919+ti*31+1);
+  let best=null; // of several no-guess deals, keep the one that takes the most rounds of deduction
+  for(let t=0,found=0;t<600&&found<10;t++){
+    const world=makeWorld(tank,spec.roster,r); if(!world) continue;
+    const g=newState(tank,world,null);
+    const starts=[...tank].filter(k=>!world.has(k)&&count(g,k)===0&&NEI[k].filter(n=>tank.has(n)).length>=4);
+    if(!starts.length) continue;
+    const start=pick(r,starts); const g1=newState(tank,world,start); open(g1,start);
+    const rounds=solvable(g1); if(rounds===false) continue;
+    found++; g1.rounds=rounds; g1.spec=spec; g1.seed=seed; g1.ti=ti; g1.tries=t+1; if(!best||rounds>best.rounds) best=g1;
+  }
+  return best;
+}
+// ---- UI ----
+let G=null, ti=0, seed=1, hintTimer=0;
+const els=board(document.getElementById('board'),{onKey:press,onMark:mark});
+const $=id=>document.getElementById(id);
+const say=(t,cls)=>{ const s=$('status'); s.textContent=t; s.className='status'+(cls?' '+cls:''); };
+function render(){
+  const g=G; const showAll=g.dead||g.won;
+  for(const code in els){ const d=els[code]; let cls='k'+(KEYMAP[code].w>1.3?' wide':''), face='', tell='';
+    if(!g.tank.has(code)) cls+=' off';
+    else if(g.arms.has(code)){ const n=count(g,code); cls+=' arm'; face=`<span class="face${n?'':' n0'}">${n||SPR.arm}</span>`; if(starNear(g,code)) tell=`<span class="tell star">${SPR.star}</span>`; }
+    else if(g.stars.has(code)){ cls+=' safe-star'; face=`<span class="face">${SPR.star}</span>`; }
+    else if(g.known.has(code)||(showAll&&DANGER.has(g.world.get(code)))){ cls+=' beast'; if(g.dead===code) cls+=' hit'; face=`<span class="face">${SPR[g.world.get(code)]}</span>`; }
+    else if(showAll&&g.world.get(code)==='star'){ cls+=' fog'; face=`<span class="face" style="opacity:.6">${SPR.star}</span>`; }
+    else if(g.marks.has(code)){ cls+=' mk'; face=`<span class="face">${SPR.fish}</span>`; }
+    else cls+=' fog';
+    if(code===g.start&&g.presses===0&&!showAll) cls+=' start';
+    d.className=cls; d.innerHTML=`<span class="lbl">${KB.esc(KEYMAP[code].label)}</span>${face||'<span class="face"></span>'}${tell}`;
+  }
+  const left=[...g.tank].filter(k=>!DANGER.has(g.world.get(k))&&!g.arms.has(k)&&!g.stars.has(k)).length;
+  $('h-tank').textContent=`${g.spec.name} #${g.seed}`; $('h-left').textContent=left; $('h-cr').textContent=Math.max(0,g.total-g.known.size-g.marks.size)+' / '+g.total; $('h-press').textContent=g.presses;
+  $('roster').innerHTML=Object.entries(g.spec.roster).filter(([,n])=>n).map(([t,n])=>`<span title="${INFO[t]}"><i style="color:${t==='star'?'var(--mark)':'var(--danger)'}">${SPR[t]}</i><b>${n}</b> ${t}${n>1?(t==='jelly'?'fish':'s'):''}${t==='eel'?' (3 keys, in a row)':t==='jelly'?' (top row)':t==='star'?' (safe)':''}</span>`).join('');
+}
+function press(code){
+  const g=G; if(!g||!g.tank.has(code)) return false;
+  if(g.dead||g.won){ return true; }
+  if(g.arms.has(code)||g.stars.has(code)||g.known.has(code)) return true;
+  if(g.marks.has(code)){ say(`${L(code)} is marked. Unmark it first (Shift+${L(code)}) if you want to press it.`); return true; }
+  g.presses++;
+  const t=g.world.get(code);
+  if(DANGER.has(t)){ g.dead=code; say(`The ${t==='jelly'?'jellyfish':t} on ${L(code)} bites. Backspace replays this tank, Enter deals a new one.`,'bad'); render(); return true; }
+  const before=g.arms.size+g.stars.size; open(g,code); const gained=g.arms.size+g.stars.size-before;
+  if(t==='star') say(`A starfish on ${L(code)}: its ring lights up.`);
+  else if(gained>1) say(`${L(code)} feels nothing: calm water, the arm spreads on its own.`);
+  else say(`${L(code)} feels ${count(g,code)} creature${count(g,code)===1?'':'s'} touching it.`);
+  if(won(g)){ g.won=true; say(`Tank filled in ${g.presses} presses. Enter for a new one.`,'good'); }
+  render(); return true;
+}
+function mark(code){ const g=G; if(!g||!g.tank.has(code)||g.dead||g.won) return; if(g.arms.has(code)||g.stars.has(code)||g.known.has(code)) return; if(g.marks.has(code)) g.marks.delete(code); else g.marks.add(code); render(); }
+function hint(){
+  const g=G; if(!g||g.dead||g.won) return; const d=deduce(g); clearTimeout(hintTimer); for(const e of document.querySelectorAll('.k.hint')) e.classList.remove('hint','bad');
+  let k=null,bad=false; if(d.safe.length){ k=d.safe.find(x=>!g.marks.has(x))||d.safe[0]; say(`${L(k)} is certainly safe.`); } else if(d.beast.length){ k=d.beast[0]; bad=true; say(`${L(k)} certainly holds a creature.`); } else say('Nothing is certain from what the arms feel. (This should not happen: tell Gigo which tank.)','bad');
+  if(k){ els[k].classList.add('hint'); if(bad) els[k].classList.add('bad'); hintTimer=setTimeout(()=>els[k].classList.remove('hint','bad'),1600); }
+}
+function start(newSeed){
+  if(newSeed) seed++; G=generate(ti,seed); if(!G){ say('Could not deal a no-guess tank here, trying the next layout.','bad'); ti++; G=generate(ti,seed); }
+  say(`Your arm settled on ${L(G.start)} and felt calm water. Press keys next to what you know; the number is how many creature keys touch that arm.`); render();
+}
+$('b-again').onclick=()=>start(false); $('b-new').onclick=()=>{ ti++; start(true); }; $('b-hint').onclick=hint;
+keys((code,shift)=>{ if(code==='Backspace'){ start(false); return true; } if(code==='Enter'){ ti++; start(true); return true; } if(code==='Tab'){ hint(); return true; }
+  if(!G||!G.tank.has(code)) return false; if(shift) mark(code); else press(code); return true; });
+window.A={get G(){return G;},deduce,solvable,generate,TANKS};
+start(false);
+})();
+</script>
+</body>
+</html>

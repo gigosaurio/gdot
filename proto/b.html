@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Proto B · Senses</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Silkscreen&display=swap">
+<link rel="stylesheet" href="proto.css">
+<style>
+.k.arm .face.claws{color:var(--danger);font-family:var(--disp);font-size:calc(var(--u)*.36);gap:2px} .k.arm .face.claws svg{width:28%;height:46%}
+.k .tell.arrow svg{width:100%;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);align-items:center}
+.legend i{display:inline-flex;width:18px;height:14px;vertical-align:-2px;margin-right:4px} .legend i svg{width:100%;height:100%}
+.legend .ring{display:inline-block;width:14px;height:14px;border-radius:3px;box-shadow:inset 0 0 0 3px #b86ad6;vertical-align:-2px;margin-right:4px} .legend .ring.f{box-shadow:inset 0 0 0 3px rgba(184,106,214,.38)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>B · Senses <small>still water · each creature is felt differently</small></h1>
+    <div class="hud">
+      <div><span>tank</span><b id="h-tank">–</b></div>
+      <div><span>to fill</span><b id="h-left">–</b></div>
+      <div><span>creatures</span><b id="h-cr">–</b></div>
+      <div><span>presses</span><b id="h-press">0</b></div>
+    </div>
+  </header>
+  <div class="plate"><div id="board"></div></div>
+  <div class="status" id="status"></div>
+  <div class="roster" id="roster"></div>
+  <div class="legend" id="legend"></div>
+  <p class="help"><b>Nothing moves, and no arm counts.</b> Each arm feels each creature in its own way: a <b>crab</b> next to it is a claw (one per crab);
+    a <b>jellyfish</b> stings, hard when it touches the arm and faintly from two keys away; the <b>shark</b> pulls at every arm in its row, and at any arm touching it (the arrow points at it);
+    a <b>starfish</b> next to an arm shows as a star, and landing on it lights its ring. An arm that feels nothing is calm water: it spreads by itself.
+    Press a creature and it bites. Fill every key the creatures do not hold. Every tank can be finished without a guess.</p>
+  <footer>
+    <button id="b-again">Same tank <kbd>Bksp</kbd></button>
+    <button id="b-new">New tank <kbd>Enter</kbd></button>
+    <button id="b-hint">What is certain? <kbd>Tab</kbd></button>
+    <span><kbd>Shift</kbd>+key or right-click cycles a mark: crab → jellyfish → shark</span>
+    <a href="index.html">all prototypes</a>
+  </footer>
+</div>
+<script src="kb.js"></script>
+<script>
+(function(){
+'use strict';
+const {NEI,KEYMAP,ROWY,L,codes,dist,SPR,board,keys,rng,pick,esc}=KB;
+const DANGER=new Set(['crab','jelly','shark']);
+const ARROW='<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 10 H15 M11 5 L16 10 L11 15" stroke="currentColor" stroke-width="3.2" fill="none" stroke-linecap="square"/></svg>';
+const TANKS=[
+  {name:'Letters', keys:'Q W E R T Y U I O P A S D F G H J K L ; Z X C V B N M , . /', roster:{shark:1,jelly:1,crab:3,star:1}},
+  {name:'Numbers down', keys:'1 2 3 4 5 6 7 8 9 0 Q W E R T Y U I O P A S D F G H J K L ;', roster:{shark:1,jelly:2,crab:3,star:1}},
+  {name:'Home and Space', keys:'A S D F G H J K L ; Z X C V B N M , . / Space Alt Win', roster:{shark:1,jelly:1,crab:3,star:1}},
+];
+const MARKS=['crab','jelly','shark'];
+// ---- world ----
+function makeWorld(tank,roster,r){
+  const keysArr=[...tank], world=new Map(); const free=()=>keysArr.filter(k=>!world.has(k));
+  const topRow=Math.min(...keysArr.map(k=>KEYMAP[k].row));
+  for(let i=0;i<(roster.shark||0);i++){ const s=free(); world.set(pick(r,s),'shark'); }
+  for(let i=0;i<(roster.jelly||0);i++){ const spots=free().filter(k=>KEYMAP[k].row===topRow); if(!spots.length) return null; world.set(pick(r,spots),'jelly'); }
+  for(let i=0;i<(roster.crab||0);i++){ const s=free(); if(!s.length) return null; world.set(pick(r,s),'crab'); }
+  for(let i=0;i<(roster.star||0);i++){ const s=free(); if(!s.length) return null; world.set(pick(r,s),'star'); }
+  return world;
+}
+// senses of arm a given a world (Map) -- the same functions judge candidate worlds in deduce()
+const cx=k=>KEYMAP[k].x+KEYMAP[k].w/2, cy=k=>ROWY[KEYMAP[k].row];
+function pull(a,s){ // what arm a feels of a shark on s: '' | 'E' | 'W' | 'a<deg>'
+  if(!s||a===s) return ''; if(KEYMAP[a].row===KEYMAP[s].row) return cx(s)>cx(a)?'E':'W';
+  if(NEI[a].includes(s)) return 'a'+Math.round(Math.atan2(cy(s)-cy(a),cx(s)-cx(a))*180/Math.PI); return '';
+}
+function senses(g,a,world){ world=world||g.world; let claws=0,sting=0,p='',star=false;
+  for(const n of NEI[a]) if(g.tank.has(n)){ const t=world.get(n); if(t==='crab') claws++; else if(t==='star'&&!g.stars.has(n)) star=true; }
+  for(const [k,t] of world){ if(t==='jelly'){ const d=g.D[a].get(k); if(d===1) sting=2; else if(d===2&&sting<2) sting=1; } else if(t==='shark') p=pull(a,k); }
+  return {claws,sting,pull:p,star};
+}
+const calm=s=>!s.claws&&!s.sting&&!s.pull;
+function newState(tank,world,start){ let total=0; for(const t of world.values()) if(DANGER.has(t)) total++; const D={}; for(const k of tank) D[k]=dist(k,tank);
+  return {tank,world,D,start,total,arms:new Set(),stars:new Set(),known:new Set(),marks:new Map(),dead:null,won:false,presses:0}; }
+function open(g,k){
+  if(g.arms.has(k)||g.stars.has(k)) return;
+  if(g.world.get(k)==='star'){ g.stars.add(k); g.marks.delete(k); for(const n of NEI[k]) if(g.tank.has(n)){ if(DANGER.has(g.world.get(n))){ g.known.add(n); g.marks.delete(n); } else open(g,n); } return; }
+  g.arms.add(k); g.marks.delete(k);
+  if(calm(senses(g,k))) for(const n of NEI[k]) if(g.tank.has(n)) open(g,n);
+}
+const won=g=>[...g.tank].every(k=>DANGER.has(g.world.get(k))||g.arms.has(k)||g.stars.has(k));
+// ---- what is certain: each sense is its own little puzzle; a key is safe when no sense can put anything there ----
+function combos(arr,n,f){ const idx=[]; (function rec(s){ if(idx.length===n){ f(idx.map(i=>arr[i])); return; } for(let i=s;i<arr.length;i++){ idx.push(i); rec(i+1); idx.pop(); } })(0); }
+function deduce(g){
+  const unknown=[...g.tank].filter(k=>!g.arms.has(k)&&!g.stars.has(k)&&!g.known.has(k));
+  const arms=[...g.arms], obs=new Map(arms.map(a=>[a,senses(g,a)]));
+  const knownOf=t=>[...g.known].filter(k=>g.world.get(k)===t);
+  const could=new Map(unknown.map(k=>[k,new Set()])), forced=[];
+  // crabs: claw counts
+  { const need=(g.spec.roster.crab||0)-knownOf('crab').length; const fixed=knownOf('crab'); let n=0, always=new Set(unknown);
+    combos(unknown,need,set=>{ const crabs=new Set([...fixed,...set]);
+      for(const a of arms){ let c=0; for(const x of NEI[a]) if(crabs.has(x)) c++; if(c!==obs.get(a).claws) return; }
+      n++; for(const k of set) could.get(k).add('crab'); always=new Set([...always].filter(k=>set.includes(k))); });
+    if(n&&need) for(const k of always) forced.push([k,'crab']); }
+  // jellies: sting levels
+  { const need=(g.spec.roster.jelly||0)-knownOf('jelly').length; const fixed=knownOf('jelly'); let n=0, always=new Set(unknown);
+    combos(unknown,need,set=>{ const js=[...fixed,...set];
+      for(const a of arms){ let s=0; for(const j of js){ const d=g.D[a].get(j); if(d===1) s=2; else if(d===2&&s<2) s=1; } if(s!==obs.get(a).sting) return; }
+      n++; for(const k of set) could.get(k).add('jelly'); always=new Set([...always].filter(k=>set.includes(k))); });
+    if(n&&need) for(const k of always) forced.push([k,'jelly']); }
+  // the shark: pulls
+  if((g.spec.roster.shark||0)>knownOf('shark').length){ const cands=unknown.filter(k=>arms.every(a=>pull(a,k)===obs.get(a).pull)); for(const k of cands) could.get(k).add('shark'); if(cands.length===1) forced.push([cands[0],'shark']); }
+  // the starfish: tells (safe anyway, but a certain star is worth knowing)
+  if((g.spec.roster.star||0)>g.stars.size){ const cands=unknown.filter(k=>arms.every(a=>(NEI[a].includes(k))===obs.get(a).star)); for(const k of cands) could.get(k).add('star'); if(cands.length===1) forced.push([cands[0],'star']); }
+  const safe=unknown.filter(k=>![...could.get(k)].some(t=>DANGER.has(t)));
+  const beast=forced.filter(([,t])=>DANGER.has(t));
+  return {safe,beast,star:forced.filter(([,t])=>t==='star').map(([k])=>k)};
+}
+function solvable(g0){
+  const g={tank:g0.tank,world:g0.world,D:g0.D,spec:g0.spec,total:g0.total,arms:new Set(g0.arms),stars:new Set(g0.stars),known:new Set(g0.known),marks:new Map()};
+  let rounds=0;
+  while(!won(g)){ const d=deduce(g); if(!d.safe.length&&!d.beast.length) return false; for(const [k] of d.beast) g.known.add(k); for(const k of d.safe) open(g,k); if(++rounds>200) return false; }
+  return rounds;
+}
+function generate(ti,seed){
+  const spec=TANKS[ti%TANKS.length], tank=new Set(codes(spec.keys)), r=rng(seed*104729+ti*31+7);
+  let best=null;
+  for(let t=0,found=0;t<600&&found<8;t++){
+    const world=makeWorld(tank,spec.roster,r); if(!world) continue;
+    const g=newState(tank,world,null); g.spec=spec;
+    const starts=[...tank].filter(k=>!world.has(k)&&calm(senses(g,k))&&NEI[k].filter(n=>tank.has(n)).length>=4);
+    if(!starts.length) continue;
+    const start=pick(r,starts); const g1=newState(tank,world,start); g1.spec=spec; open(g1,start);
+    const rounds=solvable(g1); if(rounds===false) continue;
+    found++; g1.rounds=rounds; g1.seed=seed; g1.ti=ti; g1.tries=t+1; if(!best||rounds>best.rounds) best=g1;
+  }
+  return best;
+}
+// ---- UI ----
+let G=null, ti=0, seed=1, hintTimer=0;
+const els=board(document.getElementById('board'),{onKey:press,onMark:mark});
+const $=id=>document.getElementById(id);
+const say=(t,cls)=>{ const s=$('status'); s.textContent=t; s.className='status'+(cls?' '+cls:''); };
+function render(){
+  const g=G; const showAll=g.dead||g.won;
+  for(const code in els){ const d=els[code]; let cls='k'+(KEYMAP[code].w>1.3?' wide':''), face='', tell='';
+    if(!g.tank.has(code)) cls+=' off';
+    else if(g.arms.has(code)){ const s=senses(g,code); cls+=' arm';
+      face=s.claws?`<span class="face claws">${s.claws}${SPR.claw}</span>`:`<span class="face n0">${SPR.arm}</span>`;
+      if(s.sting) cls+=s.sting===2?' sting-strong':' sting-faint';
+      if(s.pull){ const deg=s.pull==='E'?0:s.pull==='W'?180:+s.pull.slice(1); tell+=`<span class="tell arrow" style="transform:rotate(${deg}deg)">${ARROW}</span>`; }
+      if(s.star) tell+=`<span class="tell star">${SPR.star}</span>`; }
+    else if(g.stars.has(code)){ cls+=' safe-star'; face=`<span class="face">${SPR.star}</span>`; }
+    else if(g.known.has(code)||(showAll&&DANGER.has(g.world.get(code)))){ cls+=' beast'; if(g.dead===code) cls+=' hit'; face=`<span class="face">${SPR[g.world.get(code)]}</span>`; }
+    else if(showAll&&g.world.get(code)==='star'){ cls+=' fog'; face=`<span class="face" style="opacity:.6">${SPR.star}</span>`; }
+    else if(g.marks.has(code)){ cls+=' mk'; face=`<span class="face">${SPR[g.marks.get(code)]}</span>`; }
+    else cls+=' fog';
+    if(code===g.start&&g.presses===0&&!showAll) cls+=' start';
+    d.className=cls; d.innerHTML=`<span class="lbl">${esc(KEYMAP[code].label)}</span>${face||'<span class="face"></span>'}${tell}`;
+  }
+  const left=[...g.tank].filter(k=>!DANGER.has(g.world.get(k))&&!g.arms.has(k)&&!g.stars.has(k)).length;
+  $('h-tank').textContent=`${g.spec.name} #${g.seed}`; $('h-left').textContent=left; $('h-cr').textContent=Math.max(0,g.total-g.known.size-g.marks.size)+' / '+g.total; $('h-press').textContent=g.presses;
+  const name={shark:'shark',jelly:'jellyfish',crab:'crab',star:'starfish'};
+  $('roster').innerHTML=Object.entries(g.spec.roster).filter(([,n])=>n).map(([t,n])=>`<span><i style="color:${t==='star'?'var(--mark)':'var(--danger)'}">${SPR[t]}</i><b>${n}</b> ${name[t]}${n>1?(t==='jelly'?'':'s'):''}${t==='jelly'?' (top row)':t==='star'?' (safe)':''}</span>`).join('');
+  $('legend').innerHTML=`<span><i style="color:var(--danger)">${SPR.claw}</i>a crab touches this arm (one claw each)</span><span><b class="ring"></b>a jellyfish touches it</span><span><b class="ring f"></b>a jellyfish two keys away</span><span><i style="color:var(--danger)">${ARROW}</i>the shark: in this row that way, or touching the arm</span><span><i style="color:var(--mark)">${SPR.star}</i>a starfish touches it</span>`;
+}
+function describe(s){ const parts=[]; if(s.claws) parts.push(`${s.claws} claw${s.claws>1?'s':''}`); if(s.sting) parts.push(s.sting===2?'a sharp sting':'a faint sting'); if(s.pull) parts.push(s.pull==='E'?'the shark pulling from the right':s.pull==='W'?'the shark pulling from the left':'the shark right next to it'); if(s.star) parts.push('a starfish'); return parts.length?parts.join(', '):'nothing'; }
+function press(code){
+  const g=G; if(!g||!g.tank.has(code)) return false;
+  if(g.dead||g.won) return true;
+  if(g.arms.has(code)||g.stars.has(code)||g.known.has(code)) return true;
+  if(g.marks.has(code)){ say(`${L(code)} is marked. Cycle the mark off (Shift+${L(code)}) if you want to press it.`); return true; }
+  g.presses++;
+  const t=g.world.get(code);
+  if(DANGER.has(t)){ g.dead=code; say(`The ${t==='jelly'?'jellyfish':t} on ${L(code)} bites. Backspace replays this tank, Enter deals a new one.`,'bad'); render(); return true; }
+  const before=g.arms.size+g.stars.size; open(g,code); const gained=g.arms.size+g.stars.size-before;
+  if(t==='star') say(`A starfish on ${L(code)}: its ring lights up.`);
+  else { const s=senses(g,code); say(`${L(code)} feels ${describe(s)}.${calm(s)&&gained>1?' Calm water: the arm spreads on its own.':''}`); }
+  if(won(g)){ g.won=true; say(`Tank filled in ${g.presses} presses. Enter for a new one.`,'good'); }
+  render(); return true;
+}
+function mark(code){ const g=G; if(!g||!g.tank.has(code)||g.dead||g.won) return; if(g.arms.has(code)||g.stars.has(code)||g.known.has(code)) return;
+  const cur=g.marks.get(code); const i=cur?MARKS.indexOf(cur)+1:0; if(i>=MARKS.length) g.marks.delete(code); else g.marks.set(code,MARKS[i]); render(); }
+function hint(){
+  const g=G; if(!g||g.dead||g.won) return; const d=deduce(g); clearTimeout(hintTimer); for(const e of document.querySelectorAll('.k.hint')) e.classList.remove('hint','bad');
+  let k=null,bad=false;
+  if(d.star.length){ k=d.star[0]; say(`${L(k)} is certainly the starfish.`); }
+  else if(d.safe.length){ k=d.safe.find(x=>!g.marks.has(x))||d.safe[0]; say(`${L(k)} is certainly safe.`); }
+  else if(d.beast.length){ k=d.beast[0][0]; bad=true; say(`${L(k)} is certainly a ${d.beast[0][1]==='jelly'?'jellyfish':d.beast[0][1]}.`); }
+  else say('Nothing is certain from what the arms feel. (This should not happen: tell Gigo which tank.)','bad');
+  if(k){ els[k].classList.add('hint'); if(bad) els[k].classList.add('bad'); hintTimer=setTimeout(()=>els[k].classList.remove('hint','bad'),1600); }
+}
+function start(newSeed){
+  if(newSeed) seed++; G=generate(ti,seed); if(!G){ say('Could not deal a no-guess tank here, trying the next layout.','bad'); ti++; G=generate(ti,seed); }
+  say(`Your arm settled on ${L(G.start)} and felt nothing: calm water. Each arm reports what touches it; read the legend under the roster.`); render();
+}
+$('b-again').onclick=()=>start(false); $('b-new').onclick=()=>{ ti++; start(true); }; $('b-hint').onclick=hint;
+keys((code,shift)=>{ if(code==='Backspace'){ start(false); return true; } if(code==='Enter'){ ti++; start(true); return true; } if(code==='Tab'){ hint(); return true; }
+  if(!G||!G.tank.has(code)) return false; if(shift) mark(code); else press(code); return true; });
+window.B={get G(){return G;},deduce,solvable,generate,senses,TANKS};
+start(false);
+})();
+</script>
+</body>
+</html>

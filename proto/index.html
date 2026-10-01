@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>G. prototypes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Silkscreen&display=swap">
+<link rel="stylesheet" href="proto.css">
+<style>
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.card{background:var(--plate);border:3px solid;border-color:var(--key-hi) var(--key-lo) var(--key-lo) var(--key-hi);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.card h2{font-family:var(--disp);font-size:15px;margin:0;font-weight:400} .card p{margin:0;font-size:13px;color:var(--ink)} .card .q{color:var(--muted);font-size:12px}
+.card a.go{align-self:flex-start;font-family:var(--font);background:var(--key);border:1px solid;border-color:var(--key-hi) var(--key-lo) var(--key-lo) var(--key-hi);padding:4px 12px;text-decoration:none;color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header><h1>G. prototypes <small>three ways the tank could work · pick by feel</small></h1></header>
+  <p class="help">Same keyboard, same creatures, three different games. Each one is small on purpose: play five minutes of each and notice which one you think about when you stop.
+    The question for each: <b>does a press give you something to reason with, the way a Minesweeper number does?</b></p>
+  <div class="cards">
+    <div class="card"><h2>A · Feel</h2><p>Still water, hidden creatures. An arm feels how many creature keys touch it: one number. Fill every key they do not hold.</p><p class="q">Minesweeper on a keyboard, with shapes (the eel is three keys), habitats (jellyfish at the surface) and a starfish that lights its ring. No guessing, ever.</p><a class="go" href="a.html">play A</a></div>
+    <div class="card"><h2>B · Senses</h2><p>Still water, hidden creatures, but no counting: a crab is a claw, a jellyfish a sting (sharp or faint), the shark a pull along its row.</p><p class="q">Each creature is its own little logic puzzle; the keys they share tie them together. More to learn per creature, more to deduce per press.</p><a class="go" href="b.html">play B</a></div>
+    <div class="card"><h2>C · Tides</h2><p>Nothing hidden: creatures swim fixed rounds and the next five ticks are drawn on every key. Fill the tank in the fewest presses.</p><p class="q">The current rules with the simulation taken out of your head. Planning, not deduction. The control to compare A and B against.</p><a class="go" href="c.html">play C</a></div>
+  </div>
+  <p class="help">Notes on why and what to look for: <a href="NOTES.md">NOTES.md</a> in this folder.</p>
+</div>
+</body>
+</html>
